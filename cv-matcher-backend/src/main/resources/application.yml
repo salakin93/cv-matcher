@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: cv-matcher-backend
+  profiles:
+    default: local
+  flyway:
+    enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  pattern:
+    level: "%5p [correlationId:%X{correlationId:-}]"
+  structured:
+    format:
+      console: logstash
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

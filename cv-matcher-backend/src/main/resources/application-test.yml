@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 2
+
+logging:
+  level:
+    root: WARN

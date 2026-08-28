@@ -1,0 +1,46 @@
+package com.cvmatcher.cv_matcher_backend.config;
+
+import java.io.IOException;
+import java.util.UUID;
+import java.util.regex.Pattern;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class CorrelationIdFilter extends OncePerRequestFilter {
+
+	public static final String HEADER_NAME = "X-Correlation-Id";
+	public static final String ATTRIBUTE_NAME = CorrelationIdFilter.class.getName() + ".correlationId";
+	private static final String MDC_KEY = "correlationId";
+	private static final Pattern UUID_CORRELATION_ID = Pattern.compile(
+		"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+
+	@Override
+	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+			throws ServletException, IOException {
+		String correlationId = resolveCorrelationId(request.getHeader(HEADER_NAME));
+		request.setAttribute(ATTRIBUTE_NAME, correlationId);
+		response.setHeader(HEADER_NAME, correlationId);
+		MDC.put(MDC_KEY, correlationId);
+		try {
+			filterChain.doFilter(request, response);
+		} finally {
+			MDC.remove(MDC_KEY);
+		}
+	}
+
+	private String resolveCorrelationId(String requestedCorrelationId) {
+		if (requestedCorrelationId != null && UUID_CORRELATION_ID.matcher(requestedCorrelationId).matches()) {
+			return requestedCorrelationId;
+		}
+		return UUID.randomUUID().toString();
+	}
+}
