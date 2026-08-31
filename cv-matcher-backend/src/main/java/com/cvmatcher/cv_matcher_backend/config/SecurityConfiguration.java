@@ -27,6 +27,7 @@ public class SecurityConfiguration {
         http.addFilterBefore(adminTokenAuthenticationFilter, AnonymousAuthenticationFilter.class)
                 .authorizeHttpRequests(authorize -> {
                     authorize.requestMatchers("/actuator/health", "/actuator/info").permitAll();
+                    authorize.requestMatchers("/oauth2/callback/microsoft").permitAll();
                     if (apiDocumentationEnabled) {
                         authorize.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
                     }

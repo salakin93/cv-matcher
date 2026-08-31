@@ -3,6 +3,7 @@ package com.cvmatcher.cv_matcher_backend.matchingjob.api;
 import com.cvmatcher.cv_matcher_backend.matchingjob.service.InvalidMatchingJobRequestException;
 import com.cvmatcher.cv_matcher_backend.matchingjob.service.MatchingJobConflictException;
 import com.cvmatcher.cv_matcher_backend.matchingjob.service.MatchingJobNotFoundException;
+import com.cvmatcher.cv_matcher_backend.matchingjob.service.MicrosoftConnectionRequiredException;
 import com.cvmatcher.cv_matcher_backend.matchingjob.domain.MatchingJobStatus;
 import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobRepository;
 import jakarta.servlet.http.HttpServletRequest;
@@ -55,10 +56,24 @@ public class MatchingJobExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, "The matching job request is invalid", request, null);
     }
 
+    @ExceptionHandler(MicrosoftConnectionRequiredException.class)
+    ResponseEntity<JobErrorResponse> handleMicrosoftConnectionRequired(HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new JobErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                "Microsoft connection is required",
+                Instant.now(),
+                request.getMethod(),
+                request.getRequestURI(),
+                null,
+                null,
+                "MICROSOFT_CONNECTION_REQUIRED",
+                "/api/integrations/microsoft/authorize"));
+    }
+
     private ResponseEntity<JobErrorResponse> error(HttpStatus status, String message, HttpServletRequest request, UUID activeJobId) {
         String statusUrl = activeJobId == null ? null : "/api/matching-jobs/%s".formatted(activeJobId);
         return ResponseEntity.status(status).body(new JobErrorResponse(
-                status.value(), message, Instant.now(), request.getMethod(), request.getRequestURI(), activeJobId, statusUrl));
+                status.value(), message, Instant.now(), request.getMethod(), request.getRequestURI(), activeJobId, statusUrl, null, null));
     }
 
     record JobErrorResponse(
@@ -68,6 +83,8 @@ public class MatchingJobExceptionHandler {
             String method,
             String requestUri,
             UUID activeJobId,
-            String statusUrl) {
+            String statusUrl,
+            String code,
+            String authorizationUrl) {
     }
 }

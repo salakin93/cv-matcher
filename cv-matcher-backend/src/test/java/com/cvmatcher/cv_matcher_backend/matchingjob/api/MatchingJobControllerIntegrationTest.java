@@ -11,6 +11,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobEventRepository;
 import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobRepository;
 import com.cvmatcher.cv_matcher_backend.matchingjob.service.MatchingJobConflictException;
+import com.cvmatcher.cv_matcher_backend.microsoft.domain.MicrosoftOAuthConnection;
+import com.cvmatcher.cv_matcher_backend.microsoft.repository.MicrosoftOAuthConnectionRepository;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -65,12 +67,17 @@ class MatchingJobControllerIntegrationTest {
     private MatchingJobEventRepository matchingJobEventRepository;
 
     @Autowired
+    private MicrosoftOAuthConnectionRepository microsoftOAuthConnectionRepository;
+
+    @Autowired
     private DataSource dataSource;
 
     @BeforeEach
     void cleanDatabase() {
         matchingJobEventRepository.deleteAll();
         matchingJobRepository.deleteAll();
+        microsoftOAuthConnectionRepository.deleteAll();
+        microsoftOAuthConnectionRepository.save(new MicrosoftOAuthConnection(new byte[] {1}, new byte[] {1}, "v1"));
     }
 
     @Test

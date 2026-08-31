@@ -8,6 +8,7 @@ import com.cvmatcher.cv_matcher_backend.matchingjob.domain.MatchingJobEvent;
 import com.cvmatcher.cv_matcher_backend.matchingjob.domain.MatchingJobStatus;
 import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobRepository;
 import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobEventRepository;
+import com.cvmatcher.cv_matcher_backend.microsoft.service.MicrosoftOAuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;
 import java.util.EnumSet;
@@ -29,17 +30,23 @@ public class MatchingJobService {
 
     private final MatchingJobRepository matchingJobRepository;
     private final MatchingJobEventRepository matchingJobEventRepository;
+    private final MicrosoftOAuthService microsoftOAuthService;
 
     public MatchingJobService(
             MatchingJobRepository matchingJobRepository,
-            MatchingJobEventRepository matchingJobEventRepository) {
+            MatchingJobEventRepository matchingJobEventRepository,
+            MicrosoftOAuthService microsoftOAuthService) {
         this.matchingJobRepository = matchingJobRepository;
         this.matchingJobEventRepository = matchingJobEventRepository;
+        this.microsoftOAuthService = microsoftOAuthService;
     }
 
     @Transactional
     public MatchingJobCreatedResponse create(CreateMatchingJobRequest request, HttpServletRequest httpRequest) {
         validateBusinessRules(request);
+        if (!microsoftOAuthService.hasActiveConnection()) {
+            throw new MicrosoftConnectionRequiredException();
+        }
 
         matchingJobRepository.findFirstByStatusInOrderByCreatedAtAsc(ACTIVE_STATUSES)
                 .ifPresent(activeJob -> {

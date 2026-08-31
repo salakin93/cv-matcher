@@ -15,6 +15,7 @@ import com.cvmatcher.cv_matcher_backend.matchingjob.domain.MatchingJobEvent;
 import com.cvmatcher.cv_matcher_backend.matchingjob.domain.MatchingJobStatus;
 import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobRepository;
 import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobEventRepository;
+import com.cvmatcher.cv_matcher_backend.microsoft.service.MicrosoftOAuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.List;
@@ -27,12 +28,14 @@ class MatchingJobServiceTest {
     void createsQueuedJobForValidRequest() {
         MatchingJobRepository repository = mock(MatchingJobRepository.class);
         MatchingJobEventRepository eventRepository = mock(MatchingJobEventRepository.class);
+        MicrosoftOAuthService microsoftOAuthService = mock(MicrosoftOAuthService.class);
+        when(microsoftOAuthService.hasActiveConnection()).thenReturn(true);
         when(repository.existsByStatusIn(anyCollection())).thenReturn(false);
         when(repository.saveAndFlush(any(MatchingJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
         HttpServletRequest httpRequest = mock(HttpServletRequest.class);
         when(httpRequest.getHeader("X-Correlation-Id")).thenReturn("9d9b7b58-0d3b-43f2-9b76-61b678d272ee");
 
-        var response = new MatchingJobService(repository, eventRepository).create(validRequest(), httpRequest);
+        var response = new MatchingJobService(repository, eventRepository, microsoftOAuthService).create(validRequest(), httpRequest);
 
         assertThat(response.status()).isEqualTo(MatchingJobStatus.QUEUED);
         assertThat(response.statusUrl()).endsWith(response.jobId().toString());
@@ -47,11 +50,12 @@ class MatchingJobServiceTest {
     void rejectsRequestWithoutMandatoryRequirement() {
         MatchingJobRepository repository = mock(MatchingJobRepository.class);
         MatchingJobEventRepository eventRepository = mock(MatchingJobEventRepository.class);
+        MicrosoftOAuthService microsoftOAuthService = mock(MicrosoftOAuthService.class);
         var request = new CreateMatchingJobRequest(
                 "Role", "Description", List.of(new RequirementRequest("Optional", 1, false)),
                 Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"));
 
-        assertThatThrownBy(() -> new MatchingJobService(repository, eventRepository).create(request, mock(HttpServletRequest.class)))
+        assertThatThrownBy(() -> new MatchingJobService(repository, eventRepository, microsoftOAuthService).create(request, mock(HttpServletRequest.class)))
                 .isInstanceOf(InvalidMatchingJobRequestException.class);
     }
 
