@@ -26,9 +26,22 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
+      OAUTH_TOKEN_ENCRYPTION_KEY: ${OAUTH_TOKEN_ENCRYPTION_KEY:-}
+      CV_DOCUMENT_ENCRYPTION_KEY: ${CV_DOCUMENT_ENCRYPTION_KEY:-}
+      CV_ARTIFACT_DIRECTORY: /var/lib/cv-matcher/artifacts
     depends_on:
       db:
         condition: service_healthy
+      clamav:
+        condition: service_started
+    volumes:
+      - cv-artifacts:/var/lib/cv-matcher/artifacts
+    networks:
+      - internal
+
+  clamav:
+    image: clamav/clamav:1.4_base
+    restart: unless-stopped
     networks:
       - internal
 
@@ -51,6 +64,7 @@ services:
 
 volumes:
   postgres-data:
+  cv-artifacts:
   caddy-data:
   caddy-config:
 
