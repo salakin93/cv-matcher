@@ -108,3 +108,206 @@ Use existing normalized JSON errors and safe categories: `MICROSOFT_AUTHORIZATIO
 ## Validation
 
 Implementation must pass Gradle tests, both Compose configuration validations, and `git diff --check`.
+# Approved amendments - 2026-08-31
+
+This section supersedes any conflicting requirement in the remainder of this specification.
+
+## Supported document formats
+
+- Accepted CV formats are PDF and DOCX, with a maximum of 10 MB per file.
+- A clean PDF uses the PDF text extractor; a clean DOCX uses the DOCX text extractor.
+- OCR is out of scope. A PDF without a text layer, a corrupt document, or a password-protected PDF/DOCX is `IGNORED`.
+- Safe reasons include `UNSUPPORTED_FORMAT`, `EMPTY_FILE`, `OVERSIZED`, `MALWARE_DETECTED`, `MALWARE_SCAN_FAILED`, `PASSWORD_PROTECTED`, and `TEXT_EXTRACTION_FAILED`.
+
+## Storage, scanning, and retention
+
+- ClamAV is an internal Docker Compose service with no host-published port. Every accepted document is scanned before extraction.
+- The original PDF/DOCX and its extracted text are separately AES-GCM encrypted in a private backend-only named Docker volume. `CV_DOCUMENT_ENCRYPTION_KEY` is a distinct secret.
+- Original files and extracted text are retained for 90 days.
+- A scheduled, auditable retention task deletes encrypted artifacts and document records after expiry. It retains only a minimal non-personal audit event with deletion timestamp, document SHA-256, and `RETENTION_EXPIRED` reason.
+
+## Duplicate handling
+
+- SHA-256 is the document-content identity.
+- If a previously stored SHA-256 is received again, the new email attachment is recorded as a duplicate reference but its file and text are not stored or extracted again.
+- Duplicate email traceability is preserved without duplicating sensitive content.
+
+## Operator protection and date range
+
+- Operator endpoints require the temporary `X-Admin-Token` header, using the `ADMIN_API_TOKEN` secret and constant-time comparison. It is allowed only over TLS outside local development.
+- Manual ingestion requires inclusive `from` and `to` ISO-8601 UTC parameters; the maximum range is 31 days.
+- The Inbox is dedicated exclusively to CVs.
+# Demand-driven vacancy ingestion - approved decision
+
+This section supersedes every scheduler, watermark, periodic-ingestion, or standalone Inbox-run reference in this specification.
+
+- The application does not continuously monitor the Inbox and does not include a scheduler for this feature.
+- Inbox ingestion happens only on demand when an operator creates a vacancy.
+- Vacancy creation supplies the inclusive `from` and `to` UTC date-time range that determines the messages to retrieve for that vacancy. The maximum range remains 31 days.
+- The ingestion run belongs to the created vacancy and its safe summary is associated with that vacancy.
+- Only documents discovered in the chosen range are part of that vacancy's working set.
+- A later vacancy may request another range. SHA-256 deduplication still avoids storing or extracting the same document twice while preserving the document-to-vacancy association.
+- The implementation must use an asynchronous vacancy-ingestion job because scanning and extraction can exceed a synchronous HTTP request. Vacancy creation returns `202 Accepted` with a safe job summary and status location.
+# Vacancy ingestion lifecycle - approved decisions
+
+This section supersedes any conflicting vacancy, extraction, retry, duplicate-retention, or recovery statement in this specification.
+
+## Vacancy states
+
+- A vacancy is created as `PENDING_CV_INGESTION` and immediately starts its asynchronous Inbox-ingestion job.
+- It becomes `READY` when the job completes without ignored documents.
+- It becomes `READY_WITH_WARNINGS` when the job completes but one or more documents are ignored.
+- It becomes `INGESTION_FAILED` when the job cannot complete because of a technical failure.
+- Matching is not available until the vacancy is `READY` or `READY_WITH_WARNINGS`.
+
+## Extraction definition
+
+- This increment extracts normalized plain text only from clean PDF and DOCX documents.
+- Candidate structured data, such as name, experience, skills, education, and matching against vacancy requirements, are outside this increment.
+- Extraction succeeds only when normalized text contains at least 50 characters. Otherwise the document is `IGNORED` with `TEXT_EXTRACTION_FAILED`.
+
+## Retry and recovery
+
+- Retry up to three times only for transient Microsoft Graph, network, ClamAV, or protected-storage failures.
+- Do not retry corrupt, password-protected, unsupported, oversized, infected, or text-unextractable files.
+- An administrator may relaunch an `INGESTION_FAILED` vacancy using its same stored date range. The relaunch creates a new auditable job and preserves previous job history.
+
+## Duplicate retention
+
+- A SHA-256 duplicate keeps a reference from every vacancy that uses it.
+- The encrypted document and extracted text remain until 90 days after the last active vacancy reference expires or is removed.
+- Deletion removes the artifacts and document record only when no active reference remains, while retaining the minimal `RETENTION_EXPIRED` audit event.
+# LLM scoring - approved decision
+
+This section supersedes any conflicting future scoring instruction for this flow.
+
+- Anthropic Claude Sonnet 5 evaluates each CV after malware scanning and text extraction. It receives only the extracted text, vacancy title/description, and requirements; it never receives the original email or document bytes.
+- For each requirement, the LLM returns an integer `compatibilityScore` from 0 to 100. Missing or insufficient CV evidence requires a score of 0.
+- `weight` is a required integer from 1 to 5. Every vacancy requires at least one `mandatory` requirement.
+- Backend, not the LLM, calculates the deterministic final score:
+
+```text
+mandatoryScore = sum(weight * compatibilityScore for mandatory requirements)
+                 / sum(weight for mandatory requirements)
+
+optionalBonus = 20 * (sum(weight * compatibilityScore for optional requirements)
+                 / sum(weight for optional requirements)) / 100
+
+totalScore = min(100, mandatoryScore + optionalBonus)
+```
+
+- If the vacancy has no optional requirements, `optionalBonus` is 0.
+- Optional requirements can add at most 20 points and can never reduce the score.
+- The LLM response is validated against a strict JSON schema before server-side scoring. Invalid, incomplete, or unavailable LLM results are handled as safe per-document analysis failures and never produce invented scores.
+# Claude response, job report, and concurrency - approved decisions
+
+This section supersedes any conflicting response, report, or concurrency instruction in this specification.
+
+## Claude response contract
+
+Claude returns strict JSON for one CV at a time. The backend validates the response before persisting analysis or calculating scores.
+
+```json
+{
+  "requirements": [
+    {
+      "requirementIndex": 0,
+      "compatibilityScore": 85,
+      "explanation": "Short compatibility explanation.",
+      "evidence": "Short supporting evidence from the extracted text."
+    }
+  ],
+  "summary": "Short candidate compatibility summary."
+}
+```
+
+- The array contains exactly one result for each input requirement.
+- `requirementIndex` maps to the zero-based input-requirement position.
+- `compatibilityScore` is an integer from 0 through 100.
+- Missing evidence requires score 0 and empty evidence.
+- `explanation`, `evidence`, and `summary` are user-facing analysis data, never log data.
+- The backend calculates `mandatoryScore`, `optionalBonus`, and `totalScore`; Claude never supplies those fields.
+- An invalid response receives one corrective retry. If it remains invalid, the document is `ANALYSIS_FAILED` and does not receive an invented score.
+
+## Final job report
+
+The completed job status response contains a safe aggregate summary and candidates sorted by `totalScore` descending, then `mandatoryScore` descending.
+
+```json
+{
+  "jobId": "uuid",
+  "status": "COMPLETED_WITH_WARNINGS",
+  "summary": {
+    "processedMessages": 15,
+    "acceptedDocuments": 10,
+    "ignoredDocuments": 2,
+    "duplicateDocuments": 3,
+    "analyzedCandidates": 9,
+    "analysisFailures": 1
+  },
+  "candidates": [
+    {
+      "rank": 1,
+      "documentId": "uuid",
+      "mandatoryScore": 82.5,
+      "optionalBonus": 11.4,
+      "totalScore": 93.9,
+      "requirements": [],
+      "summary": "Short candidate compatibility summary."
+    }
+  ]
+}
+```
+
+- `documentId` is the safe candidate identifier for this increment; candidate name and structured profile extraction are deferred.
+- Candidate analysis content is visible only in the protected job-status response and is retained for the same 90-day lifecycle as the document.
+
+## Single active job
+
+- Only one matching job may be active globally in `QUEUED`, `INGESTING_EMAILS`, `SCANNING_DOCUMENTS`, `EXTRACTING_TEXT`, or `ANALYZING_CANDIDATES` status.
+- The restriction is enforced with a database-backed constraint or lock, never in-memory only.
+- A request received while a job is active responds with `409 Conflict`, its `activeJobId`, and its protected `statusUrl`.
+- Once a job reaches a terminal status, a new vacancy job may be created.
+# Final API, LLM presentation, retention, and limits - approved decisions
+
+This section supersedes any conflicting API, LLM presentation, retention, limit, or retry instruction in this specification.
+
+## API routes
+
+- `POST /api/matching-jobs` receives the approved vacancy request body (`title`, `description`, `requirements`, `from`, `to`) and responds `202 Accepted` with `jobId`, initial status, and protected status URL.
+- `GET /api/matching-jobs/{jobId}` returns current job progress or its completed report. The frontend polls this endpoint every 3 to 5 seconds until a terminal status.
+- `POST /api/matching-jobs/{jobId}/retry` relaunches only an `INGESTION_FAILED` job using its original vacancy body and date range. It creates a new auditable job while preserving the original job history.
+
+## LLM presentation contract
+
+- Claude's `summary`, per-requirement `explanation`, and `evidence` are Spanish user-facing strings with a maximum of 300 characters each.
+- They must rely only on evidence present in the extracted CV text; Claude must not infer, invent, or add facts.
+- The protected completed-job report exposes the validated per-requirement result for every analyzed document:
+
+```json
+{
+  "requirementIndex": 0,
+  "compatibilityScore": 85,
+  "explanation": "Short Spanish explanation.",
+  "evidence": "Short Spanish evidence from the extracted CV text."
+}
+```
+
+## Retention
+
+- A completed job, its report, protected document artifacts, and extracted text are retained for 90 days after the job reaches a terminal status.
+- If a SHA-256 document is referenced by more than one job, its encrypted artifacts remain until 90 days after the most recently completed referencing job.
+- Expiry deletes protected artifacts, extracted text, document records, and job report. The system retains only the minimal non-personal `RETENTION_EXPIRED` audit event.
+
+## Limits and retries
+
+- One job processes at most 500 messages and 1,000 attachments. Reaching either limit produces `COMPLETED_WITH_WARNINGS` and a safe truncation warning in the summary.
+- Microsoft Graph, network, ClamAV, and protected-storage transient failures retry at most three times with bounded backoff.
+- Anthropic transport/transient failures retry at most two times. A syntactically invalid Claude JSON response receives one corrective retry; a still-invalid response becomes `ANALYSIS_FAILED` and receives no invented score.
+# Superseded specification
+
+This original combined specification is retained as a historical reference only. Its implementation is replaced by:
+
+- `002a-vacancy-job-foundation.md`
+- `002b-microsoft-graph-document-ingestion.md`
+- `002c-claude-analysis-final-report.md`
