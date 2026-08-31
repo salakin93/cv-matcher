@@ -7,6 +7,7 @@ import java.util.UUID;
 
 public record MatchingJobStatusResponse(
         UUID jobId,
+        String statusUrl,
         MatchingJobStatus status,
         MatchingJobMode jobMode,
         Instant from,

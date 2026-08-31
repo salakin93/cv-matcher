@@ -4,8 +4,10 @@ import com.cvmatcher.cv_matcher_backend.matchingjob.api.CreateMatchingJobRequest
 import com.cvmatcher.cv_matcher_backend.matchingjob.api.MatchingJobCreatedResponse;
 import com.cvmatcher.cv_matcher_backend.matchingjob.api.MatchingJobStatusResponse;
 import com.cvmatcher.cv_matcher_backend.matchingjob.domain.MatchingJob;
+import com.cvmatcher.cv_matcher_backend.matchingjob.domain.MatchingJobEvent;
 import com.cvmatcher.cv_matcher_backend.matchingjob.domain.MatchingJobStatus;
 import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobRepository;
+import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobEventRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;
 import java.util.EnumSet;
@@ -26,9 +28,13 @@ public class MatchingJobService {
                     MatchingJobStatus.REAUTHORIZATION_REQUIRED));
 
     private final MatchingJobRepository matchingJobRepository;
+    private final MatchingJobEventRepository matchingJobEventRepository;
 
-    public MatchingJobService(MatchingJobRepository matchingJobRepository) {
+    public MatchingJobService(
+            MatchingJobRepository matchingJobRepository,
+            MatchingJobEventRepository matchingJobEventRepository) {
         this.matchingJobRepository = matchingJobRepository;
+        this.matchingJobEventRepository = matchingJobEventRepository;
     }
 
     @Transactional
@@ -65,6 +71,7 @@ public class MatchingJobService {
 
         try {
             MatchingJob saved = matchingJobRepository.saveAndFlush(job);
+            matchingJobEventRepository.save(MatchingJobEvent.created(saved.getId()));
             return new MatchingJobCreatedResponse(
                     saved.getId(),
                     saved.getStatus(),
@@ -81,6 +88,7 @@ public class MatchingJobService {
                 .orElseThrow(() -> new MatchingJobNotFoundException(jobId));
         return new MatchingJobStatusResponse(
                 job.getId(),
+                statusUrl(job.getId()),
                 job.getStatus(),
                 job.getJobMode(),
                 job.getFrom(),

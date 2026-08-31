@@ -38,4 +38,35 @@ public class MatchingJobEvent {
 
     protected MatchingJobEvent() {
     }
+
+    private MatchingJobEvent(
+            UUID matchingJobId,
+            MatchingJobStatus previousStatus,
+            MatchingJobStatus newStatus,
+            String eventType,
+            String safeDetails) {
+        this.id = UUID.randomUUID();
+        this.matchingJobId = matchingJobId;
+        this.previousStatus = previousStatus;
+        this.newStatus = newStatus;
+        this.eventType = eventType;
+        this.safeDetails = safeDetails;
+        this.createdAt = Instant.now();
+    }
+
+    public static MatchingJobEvent created(UUID matchingJobId) {
+        return new MatchingJobEvent(matchingJobId, null, MatchingJobStatus.QUEUED, "JOB_CREATED", "Job queued");
+    }
+
+    public UUID getMatchingJobId() {
+        return matchingJobId;
+    }
+
+    public MatchingJobStatus getNewStatus() {
+        return newStatus;
+    }
+
+    public String getEventType() {
+        return eventType;
+    }
 }
