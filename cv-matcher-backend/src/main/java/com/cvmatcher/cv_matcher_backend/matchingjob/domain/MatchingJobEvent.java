@@ -58,6 +58,10 @@ public class MatchingJobEvent {
         return new MatchingJobEvent(matchingJobId, null, MatchingJobStatus.QUEUED, "JOB_CREATED", "Job queued");
     }
 
+    public static MatchingJobEvent retried(UUID matchingJobId) {
+        return new MatchingJobEvent(matchingJobId, null, MatchingJobStatus.QUEUED, "JOB_RETRIED", "Job queued for retry");
+    }
+
     public UUID getMatchingJobId() {
         return matchingJobId;
     }

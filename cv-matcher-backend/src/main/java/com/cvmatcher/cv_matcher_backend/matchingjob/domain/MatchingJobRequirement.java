@@ -35,6 +35,11 @@ public class MatchingJobRequirement {
     protected MatchingJobRequirement() {
     }
 
+    public String getDescription() { return description; }
+    public int getWeight() { return weight; }
+    public boolean isMandatory() { return mandatory; }
+    public int getDisplayOrder() { return displayOrder; }
+
     MatchingJobRequirement(MatchingJob job, String description, int weight, boolean mandatory, int displayOrder) {
         this.id = UUID.randomUUID();
         this.job = job;

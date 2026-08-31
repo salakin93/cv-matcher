@@ -73,6 +73,7 @@ public class MicrosoftOAuthService {
         MicrosoftTokenResponse tokens = tokenClient.exchangeAuthorizationCode(code, verifier);
         AesGcmCipher.EncryptedValue encryptedRefreshToken = cipher.encrypt(tokens.refreshToken());
         connectionRepository.findAllByActiveTrue().forEach(MicrosoftOAuthConnection::revoke);
+        connectionRepository.flush();
         connectionRepository.save(new MicrosoftOAuthConnection(
                 encryptedRefreshToken.ciphertext(), encryptedRefreshToken.nonce(), "v1"));
     }

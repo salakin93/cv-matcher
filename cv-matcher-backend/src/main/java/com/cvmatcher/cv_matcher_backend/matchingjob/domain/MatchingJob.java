@@ -60,6 +60,10 @@ public class MatchingJob {
     }
 
     public MatchingJob(String title, String description, Instant from, Instant to, String correlationId) {
+        this(title, description, from, to, correlationId, null);
+    }
+
+    private MatchingJob(String title, String description, Instant from, Instant to, String correlationId, UUID retryOfJobId) {
         this.id = UUID.randomUUID();
         this.title = title;
         this.description = description;
@@ -67,9 +71,18 @@ public class MatchingJob {
         this.to = to;
         this.status = MatchingJobStatus.QUEUED;
         this.jobMode = MatchingJobMode.FULL;
+        this.retryOfJobId = retryOfJobId;
         this.correlationId = correlationId;
         this.createdAt = Instant.now();
         this.updatedAt = this.createdAt;
+    }
+
+    public static MatchingJob retryOf(MatchingJob previousJob, String correlationId) {
+        MatchingJob retry = new MatchingJob(previousJob.title, previousJob.description, previousJob.from,
+                previousJob.to, correlationId, previousJob.id);
+        previousJob.requirements.forEach(requirement -> retry.addRequirement(
+                requirement.getDescription(), requirement.getWeight(), requirement.isMandatory(), requirement.getDisplayOrder()));
+        return retry;
     }
 
     public void addRequirement(String description, int weight, boolean mandatory, int displayOrder) {
@@ -111,4 +124,6 @@ public class MatchingJob {
     public Instant getUpdatedAt() {
         return updatedAt;
     }
+
+    public UUID getRetryOfJobId() { return retryOfJobId; }
 }

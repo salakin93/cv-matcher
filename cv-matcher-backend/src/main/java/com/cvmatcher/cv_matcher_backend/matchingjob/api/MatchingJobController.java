@@ -39,7 +39,8 @@ public class MatchingJobController {
     }
 
     @PostMapping("/{jobId}/retry")
-    public void retry(@PathVariable UUID jobId) {
-        matchingJobService.retry(jobId);
+    public ResponseEntity<MatchingJobCreatedResponse> retry(@PathVariable UUID jobId, HttpServletRequest httpRequest) {
+        MatchingJobCreatedResponse response = matchingJobService.retry(jobId, httpRequest);
+        return ResponseEntity.accepted().location(URI.create(response.statusUrl())).body(response);
     }
 }

@@ -56,8 +56,10 @@ class RestMicrosoftTokenClient implements MicrosoftTokenClient {
                 throw new IllegalStateException("Microsoft token response did not contain a refresh token");
             }
             return new MicrosoftTokenResponse(refreshToken);
-        } catch (java.io.IOException | InterruptedException exception) {
+        } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            throw new IllegalStateException("Microsoft token exchange failed", exception);
+        } catch (java.io.IOException exception) {
             throw new IllegalStateException("Microsoft token exchange failed", exception);
         }
     }

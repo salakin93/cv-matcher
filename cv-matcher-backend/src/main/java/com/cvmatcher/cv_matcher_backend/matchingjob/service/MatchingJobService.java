@@ -105,11 +105,30 @@ public class MatchingJobService {
                 MatchingJobStatusResponse.MatchingJobCounters.empty());
     }
 
-    public void retry(UUID jobId) {
-        if (!matchingJobRepository.existsById(jobId)) {
-            throw new MatchingJobNotFoundException(jobId);
+    @Transactional
+    public MatchingJobCreatedResponse retry(UUID jobId, HttpServletRequest httpRequest) {
+        MatchingJob previousJob = matchingJobRepository.findById(jobId)
+                .orElseThrow(() -> new MatchingJobNotFoundException(jobId));
+        if (previousJob.getStatus() != MatchingJobStatus.INGESTION_FAILED
+                && previousJob.getStatus() != MatchingJobStatus.REAUTHORIZATION_REQUIRED) {
+            throw new InvalidMatchingJobRequestException("Only failed matching jobs can be retried");
         }
-        throw new InvalidMatchingJobRequestException("Matching job retries are not available until document ingestion is implemented");
+        if (!microsoftOAuthService.hasActiveConnection()) {
+            throw new MicrosoftConnectionRequiredException();
+        }
+        matchingJobRepository.findFirstByStatusInOrderByCreatedAtAsc(ACTIVE_STATUSES)
+                .ifPresent(activeJob -> { throw new MatchingJobConflictException(activeJob.getId()); });
+        String correlationId = MDC.get("correlationId");
+        if (correlationId == null || correlationId.isBlank()) {
+            correlationId = UUID.randomUUID().toString();
+        }
+        try {
+            MatchingJob saved = matchingJobRepository.saveAndFlush(MatchingJob.retryOf(previousJob, correlationId));
+            matchingJobEventRepository.save(MatchingJobEvent.retried(saved.getId()));
+            return new MatchingJobCreatedResponse(saved.getId(), saved.getStatus(), statusUrl(saved.getId()), saved.getCreatedAt());
+        } catch (DataIntegrityViolationException exception) {
+            throw new MatchingJobConflictException(null);
+        }
     }
 
     private void validateBusinessRules(CreateMatchingJobRequest request) {
