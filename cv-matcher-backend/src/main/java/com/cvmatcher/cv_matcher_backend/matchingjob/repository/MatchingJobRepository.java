@@ -12,4 +12,6 @@ public interface MatchingJobRepository extends JpaRepository<MatchingJob, UUID> 
     boolean existsByStatusIn(Collection<MatchingJobStatus> statuses);
 
     Optional<MatchingJob> findFirstByStatusInOrderByCreatedAtAsc(Collection<MatchingJobStatus> statuses);
+
+    java.util.List<MatchingJob> findByStatusInOrderByCreatedAtAsc(Collection<MatchingJobStatus> statuses);
 }

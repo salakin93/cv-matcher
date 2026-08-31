@@ -126,4 +126,11 @@ public class MatchingJob {
     }
 
     public UUID getRetryOfJobId() { return retryOfJobId; }
+
+    public List<MatchingJobRequirement> getRequirements() { return List.copyOf(requirements); }
+
+    public void transitionTo(MatchingJobStatus nextStatus) {
+        this.status = nextStatus;
+        this.updatedAt = Instant.now();
+    }
 }

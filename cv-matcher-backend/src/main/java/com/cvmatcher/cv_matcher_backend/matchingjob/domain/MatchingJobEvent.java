@@ -62,6 +62,11 @@ public class MatchingJobEvent {
         return new MatchingJobEvent(matchingJobId, null, MatchingJobStatus.QUEUED, "JOB_RETRIED", "Job queued for retry");
     }
 
+    public static MatchingJobEvent transitioned(UUID matchingJobId, MatchingJobStatus previousStatus,
+            MatchingJobStatus newStatus, String eventType, String safeDetails) {
+        return new MatchingJobEvent(matchingJobId, previousStatus, newStatus, eventType, safeDetails);
+    }
+
     public UUID getMatchingJobId() {
         return matchingJobId;
     }
