@@ -1,5 +1,18 @@
 # Spec 002B - Microsoft Graph and document ingestion
 
+> **Implementation status:** This is the parent specification. Its delivery and
+> reviews are split into the child specifications `002b-1` through `002b-5`.
+> Implement and review one child specification at a time. Do not request a
+> complete 002B technical review until 002B-5 is complete.
+
+## Delivery sequence
+
+1. [002B-1 - OAuth refresh and Graph discovery](002b-1-oauth-graph-discovery.md)
+2. [002B-2 - Durable worker, states and recovery](002b-2-durable-ingestion-worker.md)
+3. [002B-3 - Secure document processing](002b-3-secure-document-processing.md)
+4. [002B-4 - Retention, observability and job status](002b-4-retention-observability-status.md)
+5. [002B-5 - Integrated end-to-end verification](002b-5-integrated-ingestion-verification.md)
+
 ## Status
 
 Ready after 002A is complete.
@@ -141,4 +154,3 @@ This section supersedes any conflicting completion instruction in this specifica
 - A `FULL` job with one or more `TEXT_EXTRACTED` documents persists `TEXT_EXTRACTION_COMPLETE` and automatically starts 002C analysis through the same database-backed worker.
 - No additional frontend request is required to start analysis.
 - A `FULL` job with zero analyzable documents ends directly as `COMPLETED_WITH_WARNINGS` and never starts 002C.
-
