@@ -31,7 +31,7 @@ class DurableMatchingJobIngestionWorkerTest {
                 .thenReturn(new MicrosoftGraphClient.DiscoveryResult(List.of(message), 1, 0, 0, true));
         when(messages.findByMatchingJobIdAndGraphMessageId(job.getId(), "immutable-id")).thenReturn(Optional.empty());
 
-        new DurableMatchingJobIngestionWorker(jobs, messages, graph).process(job.getId());
+        new DurableMatchingJobIngestionWorker(jobs, messages, graph, ignored -> { }).process(job.getId());
 
         verify(messages).save(org.mockito.ArgumentMatchers.any());
         assertThat(job.getStatus()).isEqualTo(MatchingJobStatus.SCANNING_DOCUMENTS);
@@ -49,7 +49,7 @@ class DurableMatchingJobIngestionWorkerTest {
         when(jobs.findById(job.getId())).thenReturn(Optional.of(job));
         when(graph.discoverInboxMessages(job.getFrom(), job.getTo())).thenThrow(new MicrosoftGraphTransientException("temporary"));
 
-        new DurableMatchingJobIngestionWorker(jobs, messages, graph).process(job.getId());
+        new DurableMatchingJobIngestionWorker(jobs, messages, graph, ignored -> { }).process(job.getId());
 
         assertThat(job.getStatus()).isEqualTo(MatchingJobStatus.INGESTION_FAILED);
     }
@@ -64,7 +64,7 @@ class DurableMatchingJobIngestionWorkerTest {
         when(jobs.findById(job.getId())).thenReturn(Optional.of(job));
         when(graph.discoverInboxMessages(job.getFrom(), job.getTo())).thenThrow(new MicrosoftReauthorizationRequiredException("reauthorize"));
 
-        new DurableMatchingJobIngestionWorker(jobs, messages, graph).process(job.getId());
+        new DurableMatchingJobIngestionWorker(jobs, messages, graph, ignored -> { }).process(job.getId());
 
         assertThat(job.getStatus()).isEqualTo(MatchingJobStatus.REAUTHORIZATION_REQUIRED);
     }

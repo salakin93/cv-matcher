@@ -12,22 +12,21 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.annotation.Lazy;
 
 @Service
-public class DurableMatchingJobIngestionWorker implements MatchingJobIngestionDispatcher {
+public class DurableMatchingJobIngestionWorker {
     private final MatchingJobRepository jobs;
     private final MatchingJobMessageRepository messages;
     private final MicrosoftGraphClient graph;
+    private final MatchingJobIngestionDispatcher dispatcher;
 
-    public DurableMatchingJobIngestionWorker(MatchingJobRepository jobs, MatchingJobMessageRepository messages, MicrosoftGraphClient graph) {
-        this.jobs = jobs; this.messages = messages; this.graph = graph;
+    public DurableMatchingJobIngestionWorker(MatchingJobRepository jobs, MatchingJobMessageRepository messages, MicrosoftGraphClient graph,
+            @Lazy MatchingJobIngestionDispatcher dispatcher) {
+        this.jobs = jobs; this.messages = messages; this.graph = graph; this.dispatcher = dispatcher;
     }
-
-    @Override public void dispatchAfterCommit(UUID jobId) { processAsync(jobId); }
-    @Async public void processAsync(UUID jobId) { process(jobId); }
 
     @Transactional
     public void process(UUID jobId) {
@@ -57,6 +56,6 @@ public class DurableMatchingJobIngestionWorker implements MatchingJobIngestionDi
         jobs.releaseInterruptedClaims();
         List<UUID> recoverable = jobs.findByStatusInOrderByCreatedAtAsc(List.of(MatchingJobStatus.QUEUED, MatchingJobStatus.INGESTING_EMAILS))
                 .stream().map(job -> job.getId()).toList();
-        recoverable.forEach(this::dispatchAfterCommit);
+        recoverable.forEach(dispatcher::dispatchAfterCommit);
     }
 }
