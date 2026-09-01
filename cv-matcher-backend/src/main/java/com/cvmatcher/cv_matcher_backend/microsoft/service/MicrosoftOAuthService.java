@@ -89,6 +89,19 @@ public class MicrosoftOAuthService {
         return connectionRepository.findByActiveTrue().isPresent();
     }
 
+    @Transactional
+    public String accessToken() {
+        MicrosoftOAuthConnection connection = connectionRepository.findByActiveTrue()
+                .orElseThrow(() -> new IllegalStateException("Microsoft authorization is required"));
+        try {
+            String refreshToken = cipher.decrypt(connection.getRefreshTokenCiphertext(), connection.getRefreshTokenNonce());
+            return tokenClient.refreshAccessToken(refreshToken).accessToken();
+        } catch (RuntimeException exception) {
+            connection.revoke();
+            throw new IllegalStateException("Microsoft reauthorization is required", exception);
+        }
+    }
+
     private String randomUrlSafeValue() {
         byte[] bytes = new byte[32];
         RANDOM.nextBytes(bytes);

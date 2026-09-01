@@ -51,17 +51,38 @@ class RestMicrosoftTokenClient implements MicrosoftTokenClient {
                 throw new IllegalStateException("Microsoft token exchange failed");
             }
             Map<String, Object> body = objectMapper.readValue(response.body(), Map.class);
-            String refreshToken = body == null ? null : (String) body.get("refresh_token");
-            if (refreshToken == null || refreshToken.isBlank()) {
-                throw new IllegalStateException("Microsoft token response did not contain a refresh token");
-            }
-            return new MicrosoftTokenResponse(refreshToken);
+            return tokenResponse(body);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Microsoft token exchange failed", exception);
         } catch (java.io.IOException exception) {
             throw new IllegalStateException("Microsoft token exchange failed", exception);
         }
+    }
+
+    @Override
+    public MicrosoftTokenResponse refreshAccessToken(String refreshToken) {
+        String form = "client_id=" + encode(clientId) + "&client_secret=" + encode(clientSecret)
+                + "&grant_type=refresh_token&refresh_token=" + encode(refreshToken)
+                + "&scope=" + encode("User.Read Mail.Read offline_access");
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create("https://login.microsoftonline.com/consumers/oauth2/v2.0/token"))
+                    .timeout(Duration.ofSeconds(20)).header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(form)).build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new IllegalStateException("Microsoft token refresh failed");
+            return tokenResponse(objectMapper.readValue(response.body(), Map.class));
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt(); throw new IllegalStateException("Microsoft token refresh failed", exception);
+        } catch (java.io.IOException exception) { throw new IllegalStateException("Microsoft token refresh failed", exception); }
+    }
+
+    private MicrosoftTokenResponse tokenResponse(Map<String, Object> body) {
+        String accessToken = body == null ? null : (String) body.get("access_token");
+        String refreshToken = body == null ? null : (String) body.get("refresh_token");
+        if (accessToken == null || accessToken.isBlank() || refreshToken == null || refreshToken.isBlank())
+            throw new IllegalStateException("Microsoft token response was incomplete");
+        return new MicrosoftTokenResponse(accessToken, refreshToken);
     }
 
     private String encode(String value) {

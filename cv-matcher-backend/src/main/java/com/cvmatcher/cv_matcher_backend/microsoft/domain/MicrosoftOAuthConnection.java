@@ -46,6 +46,8 @@ public class MicrosoftOAuthConnection {
     public UUID getId() { return id; }
     public boolean isActive() { return active; }
     public Instant getConnectedAt() { return connectedAt; }
+    public byte[] getRefreshTokenCiphertext() { return refreshTokenCiphertext; }
+    public byte[] getRefreshTokenNonce() { return refreshTokenNonce; }
 
     public void revoke() {
         this.active = false;
