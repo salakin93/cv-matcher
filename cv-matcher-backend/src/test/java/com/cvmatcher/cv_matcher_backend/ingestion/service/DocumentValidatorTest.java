@@ -18,4 +18,9 @@ class DocumentValidatorTest {
         var result = validator.validate(new GraphAttachment("a", "cv.pdf", "application/pdf", false, "not a pdf".getBytes()));
         assertThat(result.ignoredReason()).isEqualTo(IgnoredDocumentReason.UNSUPPORTED_FORMAT);
     }
+
+    @Test void rejectsPdfWithInconsistentMimeType() {
+        var result = validator.validate(new GraphAttachment("a", "cv.pdf", "image/png", false, "%PDF-1.7".getBytes()));
+        assertThat(result.ignoredReason()).isEqualTo(IgnoredDocumentReason.UNSUPPORTED_FORMAT);
+    }
 }
