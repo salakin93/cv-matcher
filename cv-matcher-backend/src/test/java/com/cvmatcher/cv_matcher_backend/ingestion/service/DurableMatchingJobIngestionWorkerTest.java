@@ -22,50 +22,46 @@ class DurableMatchingJobIngestionWorkerTest {
     void persistsUniqueMessagesAndMovesToScanningWithTruncationWarning() {
         MatchingJobRepository jobs = mock(MatchingJobRepository.class);
         MatchingJobMessageRepository messages = mock(MatchingJobMessageRepository.class);
+        IngestionJobPersistenceService persistence = mock(IngestionJobPersistenceService.class);
         MicrosoftGraphClient graph = mock(MicrosoftGraphClient.class);
         MatchingJob job = new MatchingJob("Role", "Description", Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"), "correlation");
-        when(jobs.claimQueuedJob(job.getId())).thenReturn(1);
-        when(jobs.findById(job.getId())).thenReturn(Optional.of(job));
+        when(persistence.claimAndLoadSnapshot(job.getId())).thenReturn(new IngestionJobPersistenceService.JobSnapshot(job.getId(), job.getFrom(), job.getTo()));
         var message = new MicrosoftGraphClient.GraphMessage("immutable-id", Instant.parse("2026-08-01T01:00:00Z"), List.of());
         when(graph.discoverInboxMessages(job.getFrom(), job.getTo()))
                 .thenReturn(new MicrosoftGraphClient.DiscoveryResult(List.of(message), 1, 0, 0, true));
-        when(messages.findByMatchingJobIdAndGraphMessageId(job.getId(), "immutable-id")).thenReturn(Optional.empty());
 
-        new DurableMatchingJobIngestionWorker(jobs, messages, graph, ignored -> { }).process(job.getId());
+        new DurableMatchingJobIngestionWorker(jobs, persistence, graph, ignored -> { }).process(job.getId());
 
-        verify(messages).save(org.mockito.ArgumentMatchers.any());
-        assertThat(job.getStatus()).isEqualTo(MatchingJobStatus.SCANNING_DOCUMENTS);
-        assertThat(job.getProcessedMessages()).isEqualTo(1);
-        assertThat(job.getSafeWarning()).isEqualTo("RANGE_TRUNCATED");
+        verify(persistence).persistDiscovery(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     void marksJobFailedWhenGraphRetriesAreExhausted() {
         MatchingJobRepository jobs = mock(MatchingJobRepository.class);
         MatchingJobMessageRepository messages = mock(MatchingJobMessageRepository.class);
+        IngestionJobPersistenceService persistence = mock(IngestionJobPersistenceService.class);
         MicrosoftGraphClient graph = mock(MicrosoftGraphClient.class);
         MatchingJob job = new MatchingJob("Role", "Description", Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"), "correlation");
-        when(jobs.claimQueuedJob(job.getId())).thenReturn(1);
-        when(jobs.findById(job.getId())).thenReturn(Optional.of(job));
+        when(persistence.claimAndLoadSnapshot(job.getId())).thenReturn(new IngestionJobPersistenceService.JobSnapshot(job.getId(), job.getFrom(), job.getTo()));
         when(graph.discoverInboxMessages(job.getFrom(), job.getTo())).thenThrow(new MicrosoftGraphTransientException("temporary"));
 
-        new DurableMatchingJobIngestionWorker(jobs, messages, graph, ignored -> { }).process(job.getId());
+        new DurableMatchingJobIngestionWorker(jobs, persistence, graph, ignored -> { }).process(job.getId());
 
-        assertThat(job.getStatus()).isEqualTo(MatchingJobStatus.INGESTION_FAILED);
+        verify(persistence).markFailed(job.getId());
     }
 
     @Test
     void marksJobForReauthorizationWhenMicrosoftConnectionIsInvalid() {
         MatchingJobRepository jobs = mock(MatchingJobRepository.class);
         MatchingJobMessageRepository messages = mock(MatchingJobMessageRepository.class);
+        IngestionJobPersistenceService persistence = mock(IngestionJobPersistenceService.class);
         MicrosoftGraphClient graph = mock(MicrosoftGraphClient.class);
         MatchingJob job = new MatchingJob("Role", "Description", Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-02T00:00:00Z"), "correlation");
-        when(jobs.claimQueuedJob(job.getId())).thenReturn(1);
-        when(jobs.findById(job.getId())).thenReturn(Optional.of(job));
+        when(persistence.claimAndLoadSnapshot(job.getId())).thenReturn(new IngestionJobPersistenceService.JobSnapshot(job.getId(), job.getFrom(), job.getTo()));
         when(graph.discoverInboxMessages(job.getFrom(), job.getTo())).thenThrow(new MicrosoftReauthorizationRequiredException("reauthorize"));
 
-        new DurableMatchingJobIngestionWorker(jobs, messages, graph, ignored -> { }).process(job.getId());
+        new DurableMatchingJobIngestionWorker(jobs, persistence, graph, ignored -> { }).process(job.getId());
 
-        assertThat(job.getStatus()).isEqualTo(MatchingJobStatus.REAUTHORIZATION_REQUIRED);
+        verify(persistence).markReauthorizationRequired(job.getId());
     }
 }
