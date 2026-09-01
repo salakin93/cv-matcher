@@ -96,8 +96,10 @@ public class MicrosoftOAuthService {
         try {
             String refreshToken = cipher.decrypt(connection.getRefreshTokenCiphertext(), connection.getRefreshTokenNonce());
             MicrosoftTokenResponse tokens = tokenClient.refreshAccessToken(refreshToken);
-            AesGcmCipher.EncryptedValue encryptedRefreshToken = cipher.encrypt(tokens.refreshToken());
-            connection.replaceRefreshToken(encryptedRefreshToken.ciphertext(), encryptedRefreshToken.nonce());
+            if (tokens.refreshToken() != null && !tokens.refreshToken().isBlank()) {
+                AesGcmCipher.EncryptedValue encryptedRefreshToken = cipher.encrypt(tokens.refreshToken());
+                connection.replaceRefreshToken(encryptedRefreshToken.ciphertext(), encryptedRefreshToken.nonce());
+            }
             return tokens.accessToken();
         } catch (MicrosoftReauthorizationRequiredException exception) {
             connection.revoke();

@@ -72,7 +72,7 @@ class RestMicrosoftTokenClient implements MicrosoftTokenClient {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 400 || response.statusCode() == 401) throw new MicrosoftReauthorizationRequiredException("Microsoft authorization is invalid");
             if (response.statusCode() < 200 || response.statusCode() >= 300) throw new MicrosoftTokenTransientException("Microsoft token refresh failed");
-            return tokenResponse(objectMapper.readValue(response.body(), Map.class));
+            return refreshTokenResponse(objectMapper.readValue(response.body(), Map.class));
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt(); throw new MicrosoftTokenTransientException("Microsoft token refresh interrupted", exception);
         } catch (java.io.IOException exception) { throw new MicrosoftTokenTransientException("Microsoft token refresh failed", exception); }
@@ -83,6 +83,15 @@ class RestMicrosoftTokenClient implements MicrosoftTokenClient {
         String refreshToken = body == null ? null : (String) body.get("refresh_token");
         if (accessToken == null || accessToken.isBlank() || refreshToken == null || refreshToken.isBlank())
             throw new IllegalStateException("Microsoft token response was incomplete");
+        return new MicrosoftTokenResponse(accessToken, refreshToken);
+    }
+
+    private MicrosoftTokenResponse refreshTokenResponse(Map<String, Object> body) {
+        String accessToken = body == null ? null : (String) body.get("access_token");
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new MicrosoftTokenTransientException("Microsoft token response was incomplete");
+        }
+        String refreshToken = (String) body.get("refresh_token");
         return new MicrosoftTokenResponse(accessToken, refreshToken);
     }
 
