@@ -53,6 +53,12 @@ public class MatchingJob {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "processed_messages", nullable = false)
+    private int processedMessages;
+
+    @Column(name = "safe_warning", length = 64)
+    private String safeWarning;
+
     @OneToMany(mappedBy = "job", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<MatchingJobRequirement> requirements = new ArrayList<>();
 
@@ -133,4 +139,13 @@ public class MatchingJob {
         this.status = nextStatus;
         this.updatedAt = Instant.now();
     }
+
+    public void markMessagesProcessed(int count, boolean truncated) {
+        this.processedMessages += count;
+        this.safeWarning = truncated ? "RANGE_TRUNCATED" : null;
+        this.updatedAt = Instant.now();
+    }
+
+    public int getProcessedMessages() { return processedMessages; }
+    public String getSafeWarning() { return safeWarning; }
 }

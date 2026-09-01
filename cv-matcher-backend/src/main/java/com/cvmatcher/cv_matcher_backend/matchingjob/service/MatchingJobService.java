@@ -9,6 +9,7 @@ import com.cvmatcher.cv_matcher_backend.matchingjob.domain.MatchingJobStatus;
 import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobRepository;
 import com.cvmatcher.cv_matcher_backend.matchingjob.repository.MatchingJobEventRepository;
 import com.cvmatcher.cv_matcher_backend.microsoft.service.MicrosoftOAuthService;
+import com.cvmatcher.cv_matcher_backend.ingestion.service.MatchingJobIngestionDispatcher;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;
 import java.util.EnumSet;
@@ -17,6 +18,9 @@ import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class MatchingJobService {
@@ -31,14 +35,25 @@ public class MatchingJobService {
     private final MatchingJobRepository matchingJobRepository;
     private final MatchingJobEventRepository matchingJobEventRepository;
     private final MicrosoftOAuthService microsoftOAuthService;
+    private final MatchingJobIngestionDispatcher dispatcher;
 
+    @Autowired
     public MatchingJobService(
             MatchingJobRepository matchingJobRepository,
             MatchingJobEventRepository matchingJobEventRepository,
             MicrosoftOAuthService microsoftOAuthService) {
+        this(matchingJobRepository, matchingJobEventRepository, microsoftOAuthService, jobId -> { });
+    }
+
+    public MatchingJobService(
+            MatchingJobRepository matchingJobRepository,
+            MatchingJobEventRepository matchingJobEventRepository,
+            MicrosoftOAuthService microsoftOAuthService,
+            MatchingJobIngestionDispatcher dispatcher) {
         this.matchingJobRepository = matchingJobRepository;
         this.matchingJobEventRepository = matchingJobEventRepository;
         this.microsoftOAuthService = microsoftOAuthService;
+        this.dispatcher = dispatcher;
     }
 
     @Transactional
@@ -79,6 +94,7 @@ public class MatchingJobService {
         try {
             MatchingJob saved = matchingJobRepository.saveAndFlush(job);
             matchingJobEventRepository.save(MatchingJobEvent.created(saved.getId()));
+            dispatchAfterCommit(saved.getId());
             return new MatchingJobCreatedResponse(
                     saved.getId(),
                     saved.getStatus(),
@@ -125,6 +141,7 @@ public class MatchingJobService {
         try {
             MatchingJob saved = matchingJobRepository.saveAndFlush(MatchingJob.retryOf(previousJob, correlationId));
             matchingJobEventRepository.save(MatchingJobEvent.retried(saved.getId()));
+            dispatchAfterCommit(saved.getId());
             return new MatchingJobCreatedResponse(saved.getId(), saved.getStatus(), statusUrl(saved.getId()), saved.getCreatedAt());
         } catch (DataIntegrityViolationException exception) {
             throw new MatchingJobConflictException(null);
@@ -146,5 +163,15 @@ public class MatchingJobService {
 
     private String statusUrl(UUID jobId) {
         return "/api/matching-jobs/%s".formatted(jobId);
+    }
+
+    private void dispatchAfterCommit(UUID jobId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            dispatcher.dispatchAfterCommit(jobId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override public void afterCommit() { dispatcher.dispatchAfterCommit(jobId); }
+        });
     }
 }
