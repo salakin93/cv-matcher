@@ -70,11 +70,12 @@ class RestMicrosoftTokenClient implements MicrosoftTokenClient {
                     .timeout(Duration.ofSeconds(20)).header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(form)).build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new IllegalStateException("Microsoft token refresh failed");
+            if (response.statusCode() == 400 || response.statusCode() == 401) throw new MicrosoftReauthorizationRequiredException("Microsoft authorization is invalid");
+            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new MicrosoftTokenTransientException("Microsoft token refresh failed");
             return tokenResponse(objectMapper.readValue(response.body(), Map.class));
         } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt(); throw new IllegalStateException("Microsoft token refresh failed", exception);
-        } catch (java.io.IOException exception) { throw new IllegalStateException("Microsoft token refresh failed", exception); }
+            Thread.currentThread().interrupt(); throw new MicrosoftTokenTransientException("Microsoft token refresh interrupted", exception);
+        } catch (java.io.IOException exception) { throw new MicrosoftTokenTransientException("Microsoft token refresh failed", exception); }
     }
 
     private MicrosoftTokenResponse tokenResponse(Map<String, Object> body) {

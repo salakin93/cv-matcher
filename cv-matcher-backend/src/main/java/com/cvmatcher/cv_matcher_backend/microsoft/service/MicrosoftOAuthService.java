@@ -95,10 +95,13 @@ public class MicrosoftOAuthService {
                 .orElseThrow(() -> new IllegalStateException("Microsoft authorization is required"));
         try {
             String refreshToken = cipher.decrypt(connection.getRefreshTokenCiphertext(), connection.getRefreshTokenNonce());
-            return tokenClient.refreshAccessToken(refreshToken).accessToken();
-        } catch (RuntimeException exception) {
+            MicrosoftTokenResponse tokens = tokenClient.refreshAccessToken(refreshToken);
+            AesGcmCipher.EncryptedValue encryptedRefreshToken = cipher.encrypt(tokens.refreshToken());
+            connection.replaceRefreshToken(encryptedRefreshToken.ciphertext(), encryptedRefreshToken.nonce());
+            return tokens.accessToken();
+        } catch (MicrosoftReauthorizationRequiredException exception) {
             connection.revoke();
-            throw new IllegalStateException("Microsoft reauthorization is required", exception);
+            throw exception;
         }
     }
 

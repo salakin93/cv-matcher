@@ -53,4 +53,9 @@ public class MicrosoftOAuthConnection {
         this.active = false;
         this.revokedAt = Instant.now();
     }
+
+    public void replaceRefreshToken(byte[] ciphertext, byte[] nonce) {
+        this.refreshTokenCiphertext = ciphertext;
+        this.refreshTokenNonce = nonce;
+    }
 }
