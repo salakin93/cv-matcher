@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: cv-matcher-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5430/cv-matcher}
+    username: ${DB_USERNAME:salaco}
+    password: ${DB_PASSWORD:salaco}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+app:
+  security:
+    jwt-signing-key: ${JWT_SIGNING_KEY:b*2x<5vIzJ,}?g->^0&(4xU=}TQW2UvXrvSipJV}.^*}
+    access-token-minutes: ${ACCESS_TOKEN_MINUTES:15}
+    session-hours: ${SESSION_HOURS:8}
+    verification-hours: ${VERIFICATION_HOURS:24}
+    reset-minutes: ${RESET_MINUTES:30}
+    initial-admin-email: ${INITIAL_ADMIN_EMAIL:nath.cvs@outlook.com}
+    initial-admin-password: ${INITIAL_ADMIN_PASSWORD:Nathy123cv}
