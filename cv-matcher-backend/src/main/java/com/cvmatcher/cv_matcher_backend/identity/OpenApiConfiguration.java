@@ -11,8 +11,17 @@ import org.springframework.context.annotation.Configuration;
 public class OpenApiConfiguration {
     @Bean
     OpenAPI cvMatcherOpenApi() {
-        return new OpenAPI().info(new Info().title("CV Matcher API").version("v1").description("API privada de CV Matcher"))
-                .schemaRequirement("bearerAuth", new SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT"))
+        return new OpenAPI().info(new Info()
+                        .title("CV Matcher API")
+                        .version("v1")
+                        .description("API privada de CV Matcher"))
+                .schemaRequirement(
+                        "bearerAuth",
+                        new SecurityScheme()
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("JWT")
+                )
                 .addSecurityItem(new SecurityRequirement().addList("bearerAuth"));
     }
 }

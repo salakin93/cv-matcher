@@ -37,7 +37,9 @@ public class SecurityConfiguration {
                         "/api/v1/auth/logout",
                         "/api/v1/auth/email-verification/**",
                         "/api/v1/auth/password-reset/**",
-                        "/actuator/health/**"
+                        "/actuator/health/**",
+                        "/v3/api-docs",
+                        "/swagger-ui/**"
                 ).permitAll().anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, exception) ->
