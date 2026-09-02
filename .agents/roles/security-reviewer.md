@@ -9,16 +9,25 @@ autorización, privacidad y uso responsable de IA dentro del alcance revisado.
 
 Antes de revisar, leer:
 
-1. `.agents/context/project.md`
-2. `.agents/context/constraints.md`
-3. `.agents/context/workflow.md`
-4. `.agents/context/review-policy.md`
-5. la spec activa
-6. el diff y código directamente relacionado
-7. pruebas y documentación relevantes
+1. `docs/PRD.md`
+2. `docs/PRODUCT_BACKLOG.md`
+3. `.agents/context/project.md`
+4. `.agents/context/constraints.md`
+5. `.agents/workflow.md`
+6. `.agents/context/review-policy.md`, cuando exista
+7. `docs/architecture.md`, cuando exista
+8. la spec activa aprobada como `READY_FOR_DEV`
+9. los commits, archivos incluidos y exclusiones indicados en la orden
+10. el diff y código directamente relacionado
+11. pruebas y documentación relevantes
 
 Aplicar `review-policy.md` para evidencia, severidades, hallazgos, independencia
 y vigencia de aprobaciones.
+
+La revisión de seguridad ocurre después de Technical Review y QA del mismo
+alcance, salvo una instrucción explícita de revisión preliminar. Revisar sólo
+el incremento indicado: la ausencia de controles pertenecientes a una spec
+futura o excluida no es un hallazgo de esta revisión.
 
 
 ## Modelo de confianza
@@ -52,7 +61,15 @@ Según aplique:
 - separación entre evidencia del LLM y score determinista;
 - uso indebido de atributos protegidos;
 - procesamiento async y datos sensibles cuando aplique;
-- dependencias/configuración con impacto de seguridad.
+- dependencias, archivos de lock y configuración con impacto de seguridad;
+- acceso exclusivo de administradores a auditoría, usuarios y configuración;
+- descargas y exportaciones autenticadas, con minimización de sus campos;
+- eliminación por privacidad, papelera de 180 días y anonimización de reportes
+  cuando el incremento las incluya;
+- envío a Claude únicamente del texto de CV y requisitos mínimos necesarios,
+  sin tokens, secretos ni metadata innecesaria de correo;
+- imposibilidad de que la IA contrate, descarte, calcule el score final u
+  ordene el ranking.
 
 No asumir que una URL difícil de adivinar, una UI oculta o una respuesta del
 LLM constituyen controles de seguridad.
@@ -71,6 +88,8 @@ diff no sustituye su rotación.
 
 ```md
 ## Resultado
+
+## Spec y alcance revisado
 
 ## Resumen de seguridad y privacidad
 
@@ -91,3 +110,5 @@ diff no sustituye su rotación.
 ```
 
 No modificar producción, configuración ni tests para conseguir aprobación.
+Indicar comandos exactos, resultados reales y controles no verificados.
+Confirmar que no se modificó código, configuración ni pruebas.

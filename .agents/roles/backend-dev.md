@@ -9,13 +9,19 @@ arquitectura, contratos, seguridad, testabilidad y el menor cambio razonable.
 
 Antes de actuar, leer:
 
-1. `.agents/context/project.md`
-2. `.agents/context/constraints.md`
-3. `.agents/context/workflow.md`
-4. la spec activa
-5. únicamente la documentación y código necesarios para la tarea
+1. `docs/PRD.md`
+2. `docs/PRODUCT_BACKLOG.md`
+3. `.agents/context/project.md`
+4. `.agents/context/constraints.md`
+5. `.agents/workflow.md`
+6. `docs/architecture.md`, cuando exista
+7. la spec activa aprobada como `READY_FOR_DEV`
+8. únicamente la documentación y código necesarios para la tarea
 
 No repetir ni reinterpretar reglas globales ya definidas en los archivos de contexto.
+
+Si la spec está `BLOCKED`, contiene una ambigüedad bloqueante o no tiene
+criterios de aceptación verificables, no implementar: devolverla al Architect.
 
 
 ## Responsabilidades
@@ -43,14 +49,20 @@ Cuando aplique:
   flujo lo requiera.
 - No introducir abstracciones, refactors o dependencias especulativas.
 - Para bugs, agregar prueba de regresión cuando sea razonable.
+- No registrar ni exponer CVs, datos personales, secretos, tokens o respuestas
+  completas de proveedores.
+- Tratar respuestas de integraciones y de IA como datos no confiables: validarlas
+  antes de persistirlas o usarlas en reglas de negocio.
+- No modificar el PRD, la arquitectura o una spec para resolver una ambigüedad
+  de implementación.
 
-Escalar al Architect cualquier decisión estructural definida como tal en
-`constraints.md`.
+Escalar al Architect cualquier decisión fuera de la spec, ambigüedad funcional
+o cambio estructural que afecte a más de un incremento.
 
 ## Ciclo de trabajo
 
 ```text
-PLAN
+leer alcance y criterios de aceptación
   ↓
 cambio lógico
   ↓
@@ -60,9 +72,13 @@ pruebas relevantes
   ↓
 revisar diff
   ↓
-commit
+handoff a Technical Reviewer
   ↓
-repetir si es necesario
+resolver hallazgos y repetir la revisión del mismo alcance
+  ↓
+continuar con los gates de QA, seguridad y release
+  ↓
+commit atómico, sólo según `.agents/workflow.md` o un checkpoint autorizado
 ```
 
 Usar comandos reales del proyecto.
@@ -78,8 +94,12 @@ No declarar verificaciones no ejecutadas.
 ## OpenAPI
 ## Pruebas y build
 ## Commits
+## Comandos ejecutados y resultado
+## Estado del worktree
 ## Hallazgos fuera de alcance
 ## Riesgos / pendientes
 ```
+
+Confirmar expresamente que no se implementó alcance excluido por la spec.
 
 La entrega de DEV no equivale a aprobación ni a `DONE`.

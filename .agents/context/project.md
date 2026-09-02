@@ -1,125 +1,54 @@
-# Contexto del proyecto: CV Matcher
+# CV Matcher — Project Context
 
-## Propósito
+## Product purpose
 
-CV Matcher es una aplicación interna de apoyo al proceso de reclutamiento.
+CV Matcher is a web application that helps a recruitment team review CVs received in a shared Outlook Inbox. It analyzes candidates against vacancy requirements and produces explainable rankings. The system supports human decisions; it never automatically hires or rejects a person.
 
-Permite obtener CVs recibidos en Outlook, extraer evidencia relacionada con
-los requisitos de un puesto, calcular un score determinista y mostrar un
-ranking explicable para revisión humana.
+The authoritative functional source is `docs/PRD.md`. The delivery backlog is `docs/PRODUCT_BACKLOG.md`.
 
-El sistema ayuda al operador de reclutamiento, pero nunca toma decisiones
-automáticas de contratación, rechazo o descarte de candidatos.
+## Users and access
 
----
+- `RECRUITER`: creates and manages shared vacancies, requests reports, reviews candidates, downloads protected CVs, exports reports, and maintains shared candidate profiles.
+- `ADMIN`: has recruiter capabilities plus user/role management, system settings, Outlook and Claude integration management, privacy deletion, and audit access.
 
-## Fuentes de verdad
+All recruiter data is shared. Audit records are immutable and visible only to administrators.
 
-- `docs/PRD.md`: alcance, comportamiento funcional, reglas de negocio y
-  criterios de aceptación.
-- `docs/architecture.md`: arquitectura, módulos, contratos técnicos,
-  seguridad y operación.
-- `docs/database.md`: modelo de datos y reglas de retención.
-- `docs/microsoft-graph-setup.md`: integración con Microsoft Graph y Outlook.
-- `docs/anthropic-setup.md`: integración con Anthropic Claude.
-- `docs/deployment.md`: configuración, ambientes y despliegue.
-- `.agents/context/constraints.md`: restricciones no negociables del proyecto.
-- `.agents/context/workflow.md`: flujo de trabajo y gates entre agentes.
+## Core workflow
 
-### Prioridad ante contradicciones
+1. A verified recruiter signs in using the product's own account system.
+2. The recruiter creates a vacancy with title, description, a Bolivia-time date range, and weighted mandatory/optional requirements.
+3. A durable asynchronous job obtains Inbox emails in the range from the shared Outlook account and identifies PDF or DOCX CVs.
+4. CV text can be in Spanish or English. Claude returns per-requirement analysis in Spanish.
+5. The backend validates the response and deterministically calculates the score and ranking.
+6. The recruiter receives in-app and email notification when the report finishes or fails, then reviews, downloads, filters, exports, and applies a human operational status to candidates.
 
-- Para comportamiento funcional prevalece `docs/PRD.md`.
-- Para decisiones técnicas prevalece `docs/architecture.md`.
-- `constraints.md` no puede ser contradicho por una spec o implementación.
+## Scoring rules
 
-Las contradicciones importantes no deben resolverse mediante suposiciones
-silenciosas. Deben reportarse o escalarse al rol correspondiente.
+- Every requirement has a weight from 1 to 5.
+- `mandatoryScore` is the weighted average of mandatory requirement compatibility.
+- Optional requirements add a weighted bonus of up to 20 points.
+- `totalScore` is capped at 100.
+- Missing evidence for a mandatory requirement scores 0, but the candidate remains in the ranking and is marked `NO_DEMOSTRADO`.
+- Ties are resolved by mandatory score, number of mandatory requirements met, then most recent CV.
+- Claude provides compatibility, status, explanation, and evidence only. It cannot calculate the final score, rank, change requirements, hire, or reject.
 
----
+## Candidate and document lifecycle
 
-## Estado técnico
+- A CV may be used in multiple vacancy reports.
+- Each report displays one entry per duplicated person and uses the most recent CV; identity preference is CV email, then sender email, then normalized name.
+- Original CVs are private local files; the database holds references and metadata.
+- Recruiters can move CVs to a shared trash and restore them. Trash entries are permanently removed after 180 days and are excluded from all searches and reports.
+- An administrator can perform immediate privacy deletion. Historical report entries are anonymized.
+- Historical candidate search is offered only after the recruiter confirms it when a vacancy has no candidates meeting its threshold.
 
-### Backend
+## Important product boundaries
 
-- Java 25
-- Spring Boot
-- ubicación: `cv-matcher-backend/`
+- The initial document formats are PDF and DOCX only.
+- UI, reports, notifications, and AI output are Spanish in version 1.
+- Authentication is mandatory for protected operations; CVs never use public permanent links.
+- Integration secrets, access tokens, CV contents, and personal data must never be exposed in logs, API errors, source control, or the client.
+- A vacancy can have only one report job running at a time. Global job concurrency is configurable.
 
-### Datos
+## Delivery guidance
 
-- PostgreSQL
-- Flyway
-
-### Integraciones previstas
-
-- Microsoft Graph
-- Anthropic Claude
-- Apache PDFBox
-- almacenamiento privado de documentos
-
-### Frontend
-
-- React
-- TypeScript
-
-La ubicación y herramienta de construcción del frontend deben verificarse en
-el repositorio antes de implementar. No asumir Vite, Next.js, npm, pnpm,
-yarn u otra herramienta sin evidencia.
-
----
-
-## Principios del producto
-
-1. La decisión final de selección siempre pertenece a una persona autorizada.
-2. El LLM extrae o estructura evidencia; no decide contratación.
-3. El backend calcula el score mediante reglas deterministas y reproducibles.
-4. Las respuestas de servicios externos se consideran datos no confiables y
-   deben validarse.
-5. Los CVs, contactos, tokens OAuth, evidencias y resultados son
-   confidenciales.
-6. Los procesos que deban sobrevivir reinicios deben persistir su estado.
-7. Los flujos susceptibles a repetición deben considerar idempotencia cuando
-   corresponda.
-8. Cada cambio debe poder trazarse desde requisito y spec hasta implementación
-   y verificación.
-
----
-
-## Flujo conceptual del producto
-
-```text
-Outlook
-  ↓
-Obtención y validación del CV
-  ↓
-Almacenamiento privado
-  ↓
-Extracción de información
-  ↓
-Evidencia estructurada
-  ↓
-Validación
-  ↓
-Score determinista
-  ↓
-Ranking explicable
-  ↓
-Revisión humana
-```
-
-Las specs determinan qué partes de este flujo se implementan en cada
-funcionalidad.
-
----
-
-## Regla para los agentes
-
-Antes de trabajar sobre una funcionalidad, cada agente debe consultar:
-
-1. este archivo;
-2. `.agents/context/constraints.md`;
-3. `.agents/context/workflow.md`;
-4. la spec activa;
-5. únicamente la documentación y código necesarios para su tarea.
-
-No cargar documentación adicional sin una necesidad concreta.
+Use the role workflow in `.agents/workflow.md`. Before implementation, turn approved PRD requirements into a scoped specification with acceptance criteria. Keep changes small, tested, reviewed for quality and security, and committed atomically in English using Conventional Commits.

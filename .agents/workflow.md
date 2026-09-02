@@ -1,409 +1,99 @@
-# Flujo de trabajo con agentes
+# CV Matcher Delivery Workflow
 
-Este documento define el flujo oficial de trabajo de CV Matcher.
+This workflow applies to every product increment. Its purpose is to keep decisions traceable, implementation scoped, and reviews effective.
 
-Todos los agentes deben respetar:
+## Sources of truth
 
-- `.agents/context/project.md`
-- `.agents/context/constraints.md`
-- la spec activa
-- este workflow
+1. `docs/PRD.md` — approved functional requirements.
+2. `docs/PRODUCT_BACKLOG.md` — approved product breakdown and delivery order.
+3. `.agents/context/project.md` — concise product context.
+4. `.agents/context/constraints.md` — mandatory boundaries.
+5. `.agents/specs/<increment>.md` — approved, implementation-ready scope for one increment.
+6. `docs/architecture.md` — approved technical decisions, once it exists.
 
-Las restricciones globales no se repiten aquí.
+If sources conflict, do not guess. Stop and request an explicit decision; then update the authoritative document before implementation continues.
 
----
-
-## 1. Flujo principal
-
-```text
-Solicitud / PRD
-      ↓
-   Architect
-      ↓
- READY_FOR_DEV
-      ↓
-Backend DEV / Frontend DEV
-      ↓
-Technical Review
-      ↓
- ┌────┴────┐
- ↓         ↓
- QA     Security & Privacy
- └────┬────┘
-      ↓
-Release Review
-      ↓
-READY_FOR_RELEASE
-      ↓
-Integración / Deploy
-      ↓
-Validación funcional
-      ↓
-     DONE
-```
-
-No todas las funcionalidades requieren backend y frontend. Ejecutar únicamente
-los roles aplicables al alcance.
-
----
-
-## 2. Architect → READY_FOR_DEV
-
-Architect convierte un requisito aprobado en una spec dentro de:
-
-`.agents/specs/`
-
-La spec debe definir lo necesario para implementar sin inventar decisiones
-importantes, incluyendo cuando corresponda:
-
-- objetivo y referencia al requisito;
-- alcance incluido y excluido;
-- comportamiento y reglas de negocio;
-- contratos;
-- impacto de datos;
-- integraciones;
-- errores relevantes;
-- criterios de aceptación verificables;
-- estrategia de pruebas;
-- riesgos, dependencias y decisiones pendientes.
-
-Estados:
-
-- `READY_FOR_DEV`
-- `BLOCKED`
-
-Una pregunta abierta que afecte comportamiento, arquitectura, contrato,
-persistencia, seguridad o privacidad puede bloquear desarrollo.
-
----
-
-## 3. Desarrollo
-
-Según la spec, ejecutar:
-
-- Backend DEV;
-- Frontend DEV;
-- ambos, cuando corresponda.
-
-Los DEV implementan únicamente el alcance aprobado, agregan las pruebas
-relevantes y ejecutan las verificaciones definidas en `constraints.md`.
-
-Backend y frontend pueden trabajar en paralelo cuando los contratos
-compartidos estén suficientemente definidos.
-
-Si necesitan inventar una decisión funcional o arquitectónica importante,
-deben detenerse y escalarla.
-
----
-
-## 4. Technical Review
-
-Después del desarrollo, Technical Reviewer evalúa la calidad técnica del
-cambio integrado o de las partes aplicables.
-
-Revisa principalmente:
-
-- coherencia con arquitectura;
-- responsabilidades y acoplamiento;
-- mantenibilidad y complejidad;
-- persistencia y transacciones;
-- integraciones;
-- testabilidad y calidad de pruebas;
-- compatibilidad;
-- diff y deuda técnica introducida.
-
-Estados:
-
-- `APROBADO`
-- `CAMBIOS_REQUERIDOS`
-
-`CAMBIOS_REQUERIDOS` devuelve el cambio al DEV responsable.
-
----
-
-## 5. QA y Security & Privacy
-
-Con Technical Review aprobado, QA y Security & Privacy pueden ejecutarse en
-paralelo.
-
-### QA
-
-Verifica:
-
-`PRD → SPEC → IMPLEMENTACIÓN → PRUEBA → EVIDENCIA`
-
-Cada criterio relevante debe quedar como:
-
-- `PASSED`
-- `FAILED`
-- `NOT VERIFIED`
-- `NOT APPLICABLE`
-
-Resultado:
-
-- `APROBADO`
-- `CAMBIOS_REQUERIDOS`
-
-### Security & Privacy
-
-Verifica los controles aplicables de seguridad, privacidad, PII, OAuth,
-archivos, autorización, integraciones e IA.
-
-Resultado:
-
-- `APROBADO`
-- `CAMBIOS_REQUERIDOS`
-
-Los hallazgos bloqueantes vuelven al DEV responsable.
-
----
-
-## 6. Correcciones y re-review
-
-Un reviewer no corrige código de producción.
-
-Flujo de corrección:
+## Standard lifecycle
 
 ```text
-Hallazgo
-   ↓
-DEV responsable
-   ↓
-Corrección + pruebas
-   ↓
-Nuevo commit
-   ↓
-Re-review afectado
+Product Requirements Analyst
+  → PRD approval
+  → Architect
+  → scoped specification approval
+  → Backend Developer and/or Frontend Developer
+  → Technical Reviewer
+  → developer resolves findings
+  → Technical Reviewer rechecks the same scope
+  → QA Reviewer
+  → Security & Privacy Reviewer
+  → Release Reviewer
+  → atomic commit and release decision
 ```
 
-No es necesario repetir automáticamente todos los reviews.
+Not every increment needs frontend work. Technical, QA, and security reviews may run in parallel only after the technical review has approved the scoped implementation.
 
-Repetir aquellos cuyo alcance haya sido afectado por la corrección.
+## Responsibilities and gates
 
-Ejemplos:
+### 1. Product Requirements Analyst
 
-- cambio interno de código → Technical Review;
-- cambio de comportamiento → QA;
-- cambio sobre PII, auth, archivos, OAuth o IA → Security & Privacy;
-- cambio transversal → todos los reviews afectados.
+- Elicits product decisions one at a time when needed.
+- Maintains the PRD and backlog after approval.
+- Defines user value and acceptance criteria, not technical implementation.
+- No development starts from an unapproved or ambiguous product requirement.
 
-Si la solución exige cambiar arquitectura, alcance o contrato principal,
-volver a Architect y actualizar la spec cuando corresponda.
+### 2. Architect
 
----
+- Converts approved PRD scope into a small specification.
+- Records architecture decisions and identifies blockers before implementation.
+- Each spec must state: goal, in-scope behaviour, explicit exclusions, API/data contracts when relevant, security/privacy requirements, acceptance criteria, tests, and dependencies.
+- Split broad work into ordered increments. Do not create a spec that requires unrelated future components to be complete.
 
-## 7. Vigencia de aprobaciones
+### 3. Developers
 
-Una aprobación solo es válida para el código revisado.
+- Implement only the approved spec and its acceptance criteria.
+- Do not add adjacent features, speculative infrastructure, or later increments.
+- Add proportionate automated tests and run the relevant validation commands.
+- Keep worktree changes focused. Make atomic English Conventional Commits only after the required reviews approve, unless an approved development checkpoint explicitly requests one.
 
-Si existen nuevos commits después de una aprobación, debe evaluarse si
-afectan su superficie de revisión.
+### 4. Technical Reviewer
 
-Los reviews deberían identificar, cuando sea posible, el commit o rango de
-commits revisado.
+- Reviews only the named spec and explicitly listed commits/files.
+- Evaluates design, maintainability, transactions, concurrency, migrations, error handling, tests, and consistency with the approved architecture.
+- Must not report missing functionality belonging to excluded or future increments.
+- Reports `APROBADO` or `CAMBIOS_REQUERIDOS`, with severity, evidence, impact, recommendation, affected spec, and validation commands.
 
-Release Reviewer no debe asumir que una aprobación antigua sigue siendo
-válida después de cambios relevantes.
+### 5. QA Reviewer
 
----
+- Verifies implemented behaviour only against the named approved spec and applicable PRD acceptance criteria.
+- Does not modify code.
+- Reports reproducible findings by severity and validation commands.
 
-## 8. Release Review
+### 6. Security & Privacy Reviewer
 
-Release Reviewer es el último gate antes de integración o deployment.
+- Reviews secrets, authorization, personal data/CVs, logs, exports, token handling, integrations, and AI use.
+- Does not modify code.
+- Reviews only the delivered increment while enforcing all mandatory privacy constraints.
 
-Consolida las revisiones requeridas y verifica el estado final, incluyendo
-cuando corresponda:
+### 7. Release Reviewer
 
-- build y tests;
-- commits y estado del repositorio;
-- compatibilidad frontend/backend;
-- OpenAPI;
-- migraciones;
-- configuración requerida;
-- variables de entorno;
-- orden de despliegue;
-- riesgos de compatibilidad;
-- estrategia de rollback o recuperación.
+- Confirms technical, QA, and security approval; test results; migration and deployment readiness; documentation; and a clean diff.
+- A release is blocked by unresolved critical or high-severity findings.
 
-Estados:
+## Review and correction loop
 
-- `READY_FOR_RELEASE`
-- `BLOCKED`
+1. A reviewer records only findings inside the agreed scope.
+2. The developer resolves those findings without expanding scope.
+3. The same reviewer rechecks the same spec and findings.
+4. The increment advances only when the relevant gate approves it.
+5. A newly discovered requirement outside scope becomes a backlog item or a new spec; it does not block the current increment unless it makes the delivered behaviour unsafe or incorrect.
 
-Release Reviewer no implementa correcciones ni realiza automáticamente merge,
-push o deployment.
+## Commit policy
 
----
+- Use English Conventional Commits, for example `feat(auth): add email verification`.
+- Each commit must have a concise title and an English body explaining the meaningful change and validation performed.
+- Do not mix unrelated work, generated files, credentials, or unreviewed changes.
+- Before committing, run relevant tests and `git diff --check`.
 
-## 9. READY_FOR_RELEASE
+## Required handoff format
 
-Una funcionalidad puede alcanzar `READY_FOR_RELEASE` cuando:
-
-- los reviews requeridos están aprobados y vigentes;
-- build y pruebas obligatorias pasan;
-- contratos son consistentes;
-- migraciones requeridas son válidas;
-- configuración necesaria está identificada;
-- no existen bloqueadores conocidos;
-- riesgos residuales relevantes están documentados.
-
-Una validación obligatoria `NOT VERIFIED` debe evaluarse explícitamente antes
-de aprobar release.
-
----
-
-## 10. Integración
-
-Después de `READY_FOR_RELEASE` puede realizarse integración.
-
-Si merge, resolución de conflictos o cambios posteriores alteran
-significativamente el código revisado:
-
-- ejecutar nuevamente build y pruebas relevantes;
-- revisar el diff integrado;
-- repetir los reviews afectados.
-
-Resolver un conflicto Git no demuestra por sí solo que la integración sea
-correcta.
-
----
-
-## 11. Validación funcional y DONE
-
-Después de integrar, validar el flujo funcional relevante contra el PRD y la
-spec.
-
-Una funcionalidad alcanza `DONE` cuando:
-
-```text
-READY_FOR_DEV
-+
-IMPLEMENTATION COMPLETE
-+
-TECHNICAL REVIEW APPROVED
-+
-QA APPROVED
-+
-SECURITY APPROVED cuando corresponda
-+
-READY_FOR_RELEASE
-+
-INTEGRATION VERIFIED
-+
-FUNCTIONAL VALIDATION PASSED
-=
-DONE
-```
-
-Los roles no aplicables deben registrarse como `NOT APPLICABLE`, no como
-`PASSED`.
-
----
-
-## 12. Trabajo paralelo
-
-Puede paralelizarse cuando existe independencia real.
-
-Ejemplos:
-
-```text
-Backend DEV ───────┐
-                   ├── Technical Review
-Frontend DEV ──────┘
-```
-
-```text
-QA ────────────────┐
-                   ├── Release Review
-Security ──────────┘
-```
-
-Coordinar antes de paralelizar cambios sobre:
-
-- contratos API;
-- modelos compartidos;
-- migraciones;
-- autenticación;
-- configuración común;
-- arquitectura.
-
-Usar branches o Git worktrees cuando sea útil para evitar interferencias.
-
----
-
-## 13. Escalamiento
-
-### Volver a DEV
-
-Cuando el problema sea de implementación.
-
-### Volver a Architect
-
-Cuando sea necesario cambiar:
-
-- alcance;
-- comportamiento especificado;
-- contrato principal;
-- arquitectura;
-- modelo crítico;
-- estrategia de persistencia;
-- autenticación o autorización;
-- infraestructura o tecnología principal.
-
-### Volver a reviewer
-
-Después de corregir un hallazgo dentro de su superficie de revisión.
-
----
-
-## 14. Responsabilidades
-
-| Rol | Responsabilidad principal |
-|---|---|
-| Architect | Convertir requisitos en specs implementables |
-| Backend DEV | Implementar backend |
-| Frontend DEV | Implementar frontend |
-| Technical Reviewer | Validar calidad técnica |
-| QA | Validar comportamiento y criterios de aceptación |
-| Security & Privacy Reviewer | Validar seguridad, privacidad e IA |
-| Release Reviewer | Determinar readiness para integración/deploy |
-
-Ningún agente es juez final de su propio trabajo.
-
----
-
-## 15. Definition of Done
-
-Una funcionalidad termina cuando:
-
-- la spec cumple Definition of Ready;
-- el alcance requerido está implementado;
-- criterios de aceptación están verificados;
-- pruebas y build relevantes pasan;
-- reviews requeridos están aprobados;
-- no existen hallazgos bloqueantes;
-- OpenAPI, migraciones, configuración y documentación están actualizados cuando
-  corresponda;
-- la integración fue verificada;
-- la validación funcional final pasó;
-- los riesgos residuales relevantes están documentados.
-
----
-
-## Regla final
-
-El workflow debe ser proporcional al cambio: evitar burocracia innecesaria,
-pero nunca omitir controles aplicables.
-
-Cada funcionalidad debe poder responder con evidencia:
-
-1. ¿Qué requisito implementa?
-2. ¿Qué spec lo define?
-3. ¿Qué cambió?
-4. ¿Qué pruebas lo demuestran?
-5. ¿Qué reviews aplicaron y cuál fue su resultado?
-6. ¿Está lista para release?
-7. ¿Qué riesgos permanecen?
-
-Si no existe evidencia suficiente, la funcionalidad todavía no está
-terminada.
+Every role handoff must name the role, the exact document/spec in scope, whether code changes are allowed, expected deliverable, and validation requested. For reviews, it must explicitly list excluded increments.
