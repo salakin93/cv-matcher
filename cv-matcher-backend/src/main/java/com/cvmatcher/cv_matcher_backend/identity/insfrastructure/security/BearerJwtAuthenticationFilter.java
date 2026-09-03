@@ -1,5 +1,6 @@
-package com.cvmatcher.cv_matcher_backend.identity;
+package com.cvmatcher.cv_matcher_backend.identity.insfrastructure.security;
 
+import com.cvmatcher.cv_matcher_backend.identity.application.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

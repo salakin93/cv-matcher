@@ -1,5 +1,6 @@
-package com.cvmatcher.cv_matcher_backend.identity;
+package com.cvmatcher.cv_matcher_backend.identity.insfrastructure.mail;
 
+import com.cvmatcher.cv_matcher_backend.identity.application.MailGateway;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 

@@ -1,5 +1,6 @@
-package com.cvmatcher.cv_matcher_backend.identity;
+package com.cvmatcher.cv_matcher_backend.identity.api;
 
+import com.cvmatcher.cv_matcher_backend.identity.application.IdentityService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;

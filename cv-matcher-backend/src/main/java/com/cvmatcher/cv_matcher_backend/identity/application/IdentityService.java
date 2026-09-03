@@ -1,5 +1,6 @@
-package com.cvmatcher.cv_matcher_backend.identity;
+package com.cvmatcher.cv_matcher_backend.identity.application;
 
+import com.cvmatcher.cv_matcher_backend.identity.SecurityProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -244,7 +245,7 @@ public class IdentityService {
 
     private void validatePassword(String p) {
         if (p == null || !p.matches("(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}"))
-            throw new IllegalArgumentException("Password does not meet policy");
+            throw new PasswordPolicyException();
     }
 
     public record Login(String accessToken, String refreshToken, UUID sessionId, String role,

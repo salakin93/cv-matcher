@@ -11,6 +11,11 @@ spring:
       ddl-auto: validate
   flyway:
     enabled: true
+  web:
+    error:
+      include-exception: false
+      include-message: never
+      include-stacktrace: never
 
 springdoc:
   api-docs:

@@ -1,5 +1,6 @@
-package com.cvmatcher.cv_matcher_backend.identity;
+package com.cvmatcher.cv_matcher_backend.identity.insfrastructure.bootstrap;
 
+import com.cvmatcher.cv_matcher_backend.identity.SecurityProperties;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.env.Environment;

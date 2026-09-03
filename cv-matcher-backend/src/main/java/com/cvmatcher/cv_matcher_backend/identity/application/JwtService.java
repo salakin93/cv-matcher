@@ -1,7 +1,8 @@
-package com.cvmatcher.cv_matcher_backend.identity;
+package com.cvmatcher.cv_matcher_backend.identity.application;
 
-import tools.jackson.databind.ObjectMapper;
+import com.cvmatcher.cv_matcher_backend.identity.SecurityProperties;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
