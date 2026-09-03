@@ -27,6 +27,11 @@ class ApiExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "La solicitud no es válida.", request);
     }
 
+    @ExceptionHandler(SecurityException.class)
+    ResponseEntity<ApiError> handleAuthenticationFailure(HttpServletRequest request) {
+        return error(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Credenciales inválidas.", request);
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> handleUnexpected(HttpServletRequest request) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Ocurrió un error inesperado.", request);

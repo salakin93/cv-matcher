@@ -161,9 +161,23 @@ public class IdentityService {
 
     @Transactional
     public void requestToken(String email, String purpose, String target) {
-        var u = jdbc.query("select id from user_account where email_normalized=?", rs -> rs.next() ? UUID.fromString(rs.getString(1)) : null, normalize(email));
-        if (u != null)
-            sendToken(u, purpose, target, "PASSWORD_RESET".equals(purpose) ? props.resetMinutes() * 60 : props.verificationHours() * 3600);
+        var account = jdbc.query(
+                "select id,status from user_account where email_normalized=? for update",
+                rs -> rs.next() ? new Object[]{UUID.fromString(rs.getString("id")), rs.getString("status")} : null,
+                normalize(email)
+        );
+        if (account == null) return;
+
+        var userId = (UUID) account[0];
+        var status = (String) account[1];
+
+        if ("PASSWORD_RESET".equals(purpose) && "ACTIVE".equals(status)) {
+            sendToken(userId, purpose, target, props.resetMinutes() * 60);
+        }
+
+        if ("EMAIL_VERIFICATION".equals(purpose) && "PENDING_VERIFICATION".equals(status) && canResendVerification(userId)) {
+            sendToken(userId, purpose, target, props.verificationHours() * 3600);
+        }
     }
 
     @Transactional
@@ -211,6 +225,25 @@ public class IdentityService {
         jdbc.update("insert into account_action_token(id,user_id,token_hash,purpose,target_email,expires_at,created_at) values(?,?,?,?,?,?,?)", UUID.randomUUID(), id, hash(raw), purpose, target, timestamp(Instant.now().plusSeconds(seconds)), timestamp(Instant.now()));
         var email = jdbc.queryForObject("select email from user_account where id=?", String.class, id);
         mail.send(purpose, email, raw);
+    }
+
+    private boolean canResendVerification(UUID userId) {
+        var now = Instant.now();
+        var attempts = jdbc.queryForObject(
+                "select count(*) from verification_resend_attempt where user_id=? and requested_at>=?",
+                Long.class,
+                userId,
+                timestamp(now.minusSeconds(3600))
+        );
+        if (attempts != null && attempts >= 3) return false;
+
+        jdbc.update(
+                "insert into verification_resend_attempt(id,user_id,requested_at) values(?,?,?)",
+                UUID.randomUUID(),
+                userId,
+                timestamp(now)
+        );
+        return true;
     }
 
     private void revokeAll(UUID id) {
