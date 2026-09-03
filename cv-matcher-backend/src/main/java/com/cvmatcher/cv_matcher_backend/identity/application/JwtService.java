@@ -18,6 +18,9 @@ public class JwtService {
     private final ObjectMapper objectMapper;
 
     public JwtService(SecurityProperties properties, ObjectMapper objectMapper) {
+        if (properties.jwtSigningKey() == null || properties.jwtSigningKey().getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT signing key must contain at least 256 bits of entropy");
+        }
         this.properties = properties;
         this.objectMapper = objectMapper;
     }

@@ -1,0 +1,3 @@
+JWT_SIGNING_KEY: test-only-signing-key-with-at-least-32-bytes
+INITIAL_ADMIN_EMAIL: ""
+INITIAL_ADMIN_PASSWORD: ""
