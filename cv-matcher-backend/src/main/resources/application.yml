@@ -12,6 +12,12 @@ spring:
   flyway:
     enabled: true
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
 app:
   security:
     jwt-signing-key: ${JWT_SIGNING_KEY:b*2x<5vIzJ,}?g->^0&(4xU=}TQW2UvXrvSipJV}.^*}
@@ -20,4 +26,4 @@ app:
     verification-hours: ${VERIFICATION_HOURS:24}
     reset-minutes: ${RESET_MINUTES:30}
     initial-admin-email: ${INITIAL_ADMIN_EMAIL:nath.cvs@outlook.com}
-    initial-admin-password: ${INITIAL_ADMIN_PASSWORD:Nathy123cv}
+    initial-admin-password: ${INITIAL_ADMIN_PASSWORD:admin}

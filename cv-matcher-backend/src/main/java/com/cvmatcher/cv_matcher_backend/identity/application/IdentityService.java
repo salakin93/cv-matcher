@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
@@ -34,7 +35,7 @@ public class IdentityService {
         if (exists(normalized)) return;
         var id = UUID.randomUUID();
         var now = Instant.now();
-        jdbc.update("insert into user_account(id,full_name,email,email_normalized,password_hash,role,status,created_at,updated_at) values(?,?,?,?,?,'RECRUITER','PENDING_VERIFICATION',?,?)", id, name.trim(), email.trim(), normalized, encoder.encode(password), now, now);
+        jdbc.update("insert into user_account(id,full_name,email,email_normalized,password_hash,role,status,created_at,updated_at) values(?,?,?,?,?,'RECRUITER','PENDING_VERIFICATION',?,?)", id, name.trim(), email.trim(), normalized, encoder.encode(password), timestamp(now), timestamp(now));
         sendToken(id, "EMAIL_VERIFICATION", null, props.verificationHours() * 3600);
         audit(null, "ACCOUNT_REGISTERED", id);
     }
@@ -46,18 +47,20 @@ public class IdentityService {
             throw new IllegalArgumentException("Invalid or expired token");
         var user = UUID.fromString(row.get("user_id").toString());
         if ("EMAIL_VERIFICATION".equals(purpose)) {
-            jdbc.update("update user_account set status='ACTIVE',email_verified_at=?,updated_at=? where id=?", Instant.now(), Instant.now(), user);
+            var now = Instant.now();
+            jdbc.update("update user_account set status='ACTIVE',email_verified_at=?,updated_at=? where id=?", timestamp(now), timestamp(now), user);
         } else if ("PASSWORD_RESET".equals(purpose)) {
             validatePassword(password);
-            jdbc.update("update user_account set password_hash=?,force_password_change=false,updated_at=? where id=?", encoder.encode(password), Instant.now(), user);
+            jdbc.update("update user_account set password_hash=?,force_password_change=false,updated_at=? where id=?", encoder.encode(password), timestamp(Instant.now()), user);
             revokeAll(user);
         } else {
             var target = (String) row.get("target_email");
             if (exists(target)) throw new IllegalStateException("Email already in use");
-            jdbc.update("update user_account set email=?,email_normalized=?,email_verified_at=?,updated_at=? where id=?", target, target, Instant.now(), Instant.now(), user);
+            var now = Instant.now();
+            jdbc.update("update user_account set email=?,email_normalized=?,email_verified_at=?,updated_at=? where id=?", target, target, timestamp(now), timestamp(now), user);
             revokeAll(user);
         }
-        if (jdbc.update("update account_action_token set consumed_at=? where id=? and consumed_at is null", Instant.now(), UUID.fromString(row.get("id").toString())) != 1)
+        if (jdbc.update("update account_action_token set consumed_at=? where id=? and consumed_at is null", timestamp(Instant.now()), UUID.fromString(row.get("id").toString())) != 1)
             throw new IllegalArgumentException("Invalid or expired token");
         audit(user, "TOKEN_CONFIRMED", user);
     }
@@ -92,8 +95,8 @@ public class IdentityService {
             jdbc.update(
                     "update user_account set failed_login_attempts=?, locked_until=?, updated_at=? where id=?",
                     attempts,
-                    lockedUntil,
-                    Instant.now(),
+                    lockedUntil == null ? null : timestamp(lockedUntil),
+                    timestamp(Instant.now()),
                     id
             );
 
@@ -108,8 +111,8 @@ public class IdentityService {
                 sessionId,
                 id,
                 hash(refreshToken),
-                Instant.now().plusSeconds(props.sessionHours() * 3600),
-                Instant.now()
+                timestamp(Instant.now().plusSeconds(props.sessionHours() * 3600)),
+                timestamp(Instant.now())
         );
 
         jdbc.update(
@@ -145,12 +148,12 @@ public class IdentityService {
             throw new SecurityException("Invalid session");
         var next = random();
         var id = UUID.fromString(s.get("id").toString());
-        if (jdbc.update("update user_session set revoked_at=? where id=? and revoked_at is null", Instant.now(), id) != 1) {
+        if (jdbc.update("update user_session set revoked_at=? where id=? and revoked_at is null", timestamp(Instant.now()), id) != 1) {
             revokeAll(user);
             throw new SecurityException("Invalid session");
         }
         var nextId = UUID.randomUUID();
-        jdbc.update("insert into user_session(id,user_id,refresh_token_hash,expires_at,created_at) values(?,?,?,?,?)", nextId, user, hash(next), ((java.sql.Timestamp) s.get("expires_at")).toInstant(), Instant.now());
+        jdbc.update("insert into user_session(id,user_id,refresh_token_hash,expires_at,created_at) values(?,?,?,?,?)", nextId, user, hash(next), s.get("expires_at"), timestamp(Instant.now()));
         audit(user, "REFRESH_ROTATED", user);
         return new Login(jwt.issue(user, (String) s.get("role"), nextId), next, nextId, (String) s.get("role"), Boolean.TRUE.equals(s.get("force_password_change")));
     }
@@ -164,7 +167,7 @@ public class IdentityService {
 
     @Transactional
     public void logout(UUID id) {
-        jdbc.update("update user_session set revoked_at=? where id=? and revoked_at is null", Instant.now(), id);
+        jdbc.update("update user_session set revoked_at=? where id=? and revoked_at is null", timestamp(Instant.now()), id);
     }
 
     @Transactional
@@ -178,7 +181,7 @@ public class IdentityService {
         var hash = jdbc.queryForObject("select password_hash from user_account where id=?", String.class, userId);
         if (!encoder.matches(current, hash)) throw new SecurityException("Invalid credentials");
         validatePassword(replacement);
-        jdbc.update("update user_account set password_hash=?,force_password_change=false,updated_at=? where id=?", encoder.encode(replacement), Instant.now(), userId);
+        jdbc.update("update user_account set password_hash=?,force_password_change=false,updated_at=? where id=?", encoder.encode(replacement), timestamp(Instant.now()), userId);
         revokeAll(userId);
         audit(userId, "PASSWORD_CHANGED", userId);
     }
@@ -202,23 +205,27 @@ public class IdentityService {
     }
 
     private void sendToken(UUID id, String purpose, String target, long seconds) {
-        jdbc.update("update account_action_token set consumed_at=? where user_id=? and purpose=? and consumed_at is null", Instant.now(), id, purpose);
+        jdbc.update("update account_action_token set consumed_at=? where user_id=? and purpose=? and consumed_at is null", timestamp(Instant.now()), id, purpose);
         var raw = random();
-        jdbc.update("insert into account_action_token(id,user_id,token_hash,purpose,target_email,expires_at,created_at) values(?,?,?,?,?,?,?)", UUID.randomUUID(), id, hash(raw), purpose, target, Instant.now().plusSeconds(seconds), Instant.now());
+        jdbc.update("insert into account_action_token(id,user_id,token_hash,purpose,target_email,expires_at,created_at) values(?,?,?,?,?,?,?)", UUID.randomUUID(), id, hash(raw), purpose, target, timestamp(Instant.now().plusSeconds(seconds)), timestamp(Instant.now()));
         var email = jdbc.queryForObject("select email from user_account where id=?", String.class, id);
         mail.send(purpose, email, raw);
     }
 
     private void revokeAll(UUID id) {
-        jdbc.update("update user_session set revoked_at=? where user_id=? and revoked_at is null", Instant.now(), id);
+        jdbc.update("update user_session set revoked_at=? where user_id=? and revoked_at is null", timestamp(Instant.now()), id);
     }
 
     private void audit(UUID actor, String action, UUID target) {
-        jdbc.update("insert into audit_event(id,actor_user_id,action,target_type,target_id,created_at) values(?,?,?,'USER_ACCOUNT',?,?)", UUID.randomUUID(), actor, action, target, Instant.now());
+        jdbc.update("insert into audit_event(id,actor_user_id,action,target_type,target_id,created_at) values(?,?,?,'USER_ACCOUNT',?,?)", UUID.randomUUID(), actor, action, target, timestamp(Instant.now()));
     }
 
     private String normalize(String email) {
         return email.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private Timestamp timestamp(Instant instant) {
+        return Timestamp.from(instant);
     }
 
     private String random() {

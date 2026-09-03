@@ -31,6 +31,7 @@ public class SecurityConfiguration {
         http.csrf(c -> c.csrfTokenRepository(csrf).requireCsrfProtectionMatcher(r -> HttpMethod.POST.name().equals(r.getMethod()) && ("/api/v1/auth/refresh".equals(r.getRequestURI()) || "/api/v1/auth/logout".equals(r.getRequestURI()))))
                 .cors(Customizer.withDefaults()).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a.requestMatchers(
+                        "/error",
                         "/api/v1/auth/register",
                         "/api/v1/auth/login",
                         "/api/v1/auth/refresh",
@@ -38,7 +39,8 @@ public class SecurityConfiguration {
                         "/api/v1/auth/email-verification/**",
                         "/api/v1/auth/password-reset/**",
                         "/actuator/health/**",
-                        "/v3/api-docs",
+                        "/v3/api-docs/**",
+                        "/swagger-ui.html",
                         "/swagger-ui/**"
                 ).permitAll().anyRequest().authenticated())
                 .exceptionHandling(e -> e
