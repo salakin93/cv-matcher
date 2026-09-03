@@ -5,8 +5,10 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile({"local", "test"})
-public class NoopMailGateway implements MailGateway {
+@Profile("prod")
+public class UnavailableProductionMailGateway implements MailGateway {
+    @Override
     public void send(String purpose, String email, String opaqueToken) {
+        throw new IllegalStateException("Production mail delivery is not configured");
     }
 }

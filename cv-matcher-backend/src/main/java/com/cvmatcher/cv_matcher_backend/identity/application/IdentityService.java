@@ -1,10 +1,13 @@
 package com.cvmatcher.cv_matcher_backend.identity.application;
 
 import com.cvmatcher.cv_matcher_backend.identity.SecurityProperties;
+import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -63,10 +66,10 @@ public class IdentityService {
         }
         if (jdbc.update("update account_action_token set consumed_at=? where id=? and consumed_at is null", timestamp(Instant.now()), UUID.fromString(row.get("id").toString())) != 1)
             throw new IllegalArgumentException("Invalid or expired token");
-        audit(user, "TOKEN_CONFIRMED", user);
+        audit(user, eventForTokenConfirmation(purpose), user);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = SecurityException.class)
     public Login login(String email, String password) {
         var normalizedEmail = normalize(email);
 
@@ -100,6 +103,7 @@ public class IdentityService {
                     timestamp(Instant.now()),
                     id
             );
+            if (attempts == 5) audit(id, "LOGIN_LOCKED", id);
 
             throw new SecurityException("Invalid credentials");
         }
@@ -135,7 +139,7 @@ public class IdentityService {
         );
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = SecurityException.class)
     public Login refresh(String raw) {
         var s = jdbc.queryForList("select s.*,u.role,u.force_password_change from user_session s join user_account u on u.id=s.user_id where s.refresh_token_hash=?", hash(raw)).stream().findFirst().orElse(null);
         if (s == null) throw new SecurityException("Invalid session");
@@ -173,6 +177,7 @@ public class IdentityService {
 
         if ("PASSWORD_RESET".equals(purpose) && "ACTIVE".equals(status)) {
             sendToken(userId, purpose, target, props.resetMinutes() * 60);
+            audit(userId, "PASSWORD_RESET_REQUESTED", userId);
         }
 
         if ("EMAIL_VERIFICATION".equals(purpose) && "PENDING_VERIFICATION".equals(status) && canResendVerification(userId)) {
@@ -181,14 +186,15 @@ public class IdentityService {
     }
 
     @Transactional
-    public void logout(UUID id) {
-        jdbc.update("update user_session set revoked_at=? where id=? and revoked_at is null", timestamp(Instant.now()), id);
-    }
-
-    @Transactional
     public void logout(String raw) {
-        var id = jdbc.query("select id from user_session where refresh_token_hash=?", rs -> rs.next() ? UUID.fromString(rs.getString(1)) : null, hash(raw));
-        if (id != null) logout(id);
+        var session = jdbc.query(
+                "select id,user_id from user_session where refresh_token_hash=?",
+                rs -> rs.next() ? new UUID[]{UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("user_id"))} : null,
+                hash(raw)
+        );
+        if (session != null && jdbc.update("update user_session set revoked_at=? where id=? and revoked_at is null", timestamp(Instant.now()), session[0]) == 1) {
+            audit(session[1], "LOGOUT", session[1]);
+        }
     }
 
     @Transactional
@@ -251,7 +257,25 @@ public class IdentityService {
     }
 
     private void audit(UUID actor, String action, UUID target) {
-        jdbc.update("insert into audit_event(id,actor_user_id,action,target_type,target_id,created_at) values(?,?,?,'USER_ACCOUNT',?,?)", UUID.randomUUID(), actor, action, target, timestamp(Instant.now()));
+        jdbc.update("insert into audit_event(id,actor_user_id,action,target_type,target_id,correlation_id,created_at) values(?,?,?,'USER_ACCOUNT',?,?,?)", UUID.randomUUID(), actor, action, target, correlationId(), timestamp(Instant.now()));
+    }
+
+    private String eventForTokenConfirmation(String purpose) {
+        return switch (purpose) {
+            case "EMAIL_VERIFICATION" -> "EMAIL_VERIFIED";
+            case "PASSWORD_RESET" -> "PASSWORD_RESET_COMPLETED";
+            case "EMAIL_CHANGE" -> "EMAIL_CHANGED";
+            default -> "TOKEN_CONFIRMED";
+        };
+    }
+
+    private UUID correlationId() {
+        var attributes = RequestContextHolder.getRequestAttributes();
+        if (attributes instanceof ServletRequestAttributes servletAttributes) {
+            var value = servletAttributes.getRequest().getAttribute(CorrelationIdFilter.ATTRIBUTE);
+            if (value instanceof UUID correlationId) return correlationId;
+        }
+        return null;
     }
 
     private String normalize(String email) {

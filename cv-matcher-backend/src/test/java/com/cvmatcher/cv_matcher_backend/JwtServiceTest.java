@@ -11,7 +11,7 @@ class JwtServiceTest {
 
     @Test
     void rejectsASigningKeyShorterThan256Bits() {
-        var properties = new SecurityProperties("too-short", 15, 8, 24, 30, "", "");
+        var properties = new SecurityProperties("too-short", 15, 8, 24, 30, "", "", false);
 
         assertThrows(IllegalStateException.class, () -> new JwtService(properties, new ObjectMapper()));
     }

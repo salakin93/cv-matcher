@@ -25,7 +25,12 @@ import java.util.Map;
 @EnableWebSecurity
 public class SecurityConfiguration {
     @Bean
-    SecurityFilterChain security(HttpSecurity http, BearerJwtAuthenticationFilter bearer, ObjectMapper mapper) throws Exception {
+    SecurityFilterChain security(
+            HttpSecurity http,
+            BearerJwtAuthenticationFilter bearer,
+            PasswordChangeRequiredFilter passwordChangeRequired,
+            ObjectMapper mapper
+    ) throws Exception {
         var csrf = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrf.setHeaderName("X-CSRF-TOKEN");
         http.csrf(c -> c.csrfTokenRepository(csrf).requireCsrfProtectionMatcher(r -> HttpMethod.POST.name().equals(r.getMethod()) && ("/api/v1/auth/refresh".equals(r.getRequestURI()) || "/api/v1/auth/logout".equals(r.getRequestURI()))))
@@ -50,7 +55,8 @@ public class SecurityConfiguration {
                         .accessDeniedHandler((request, response, exception) ->
                                 write(mapper, request, response, 403,
                                         "No tiene permisos para realizar esta operación.")))
-                .addFilterBefore(bearer, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(bearer, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(passwordChangeRequired, BearerJwtAuthenticationFilter.class);
         return http.build();
     }
 

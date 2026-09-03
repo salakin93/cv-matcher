@@ -1,6 +1,8 @@
 spring:
   application:
     name: cv-matcher-backend
+  profiles:
+    default: local
   config:
     # Supports running from either the repository root or the backend module.
     import: optional:file:./.env[.properties],optional:file:../.env[.properties]
@@ -25,6 +27,10 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+
+logging:
+  pattern:
+    level: "%5p [correlationId:%X{correlationId:-}]"
 
 app:
   security:
