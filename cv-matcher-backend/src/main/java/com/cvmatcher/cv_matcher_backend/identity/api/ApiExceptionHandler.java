@@ -1,14 +1,19 @@
 package com.cvmatcher.cv_matcher_backend.identity.api;
 
+import com.cvmatcher.cv_matcher_backend.administration.application.AdministrationException;
 import com.cvmatcher.cv_matcher_backend.identity.application.PasswordPolicyException;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -39,6 +44,16 @@ class ApiExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiError> handleRequestValidation(HttpServletRequest request) {
         return error(HttpStatus.UNPROCESSABLE_ENTITY, "VALIDATION_ERROR", "Revise los datos enviados.", request);
+    }
+
+    @ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class, ConstraintViolationException.class, HandlerMethodValidationException.class})
+    ResponseEntity<ApiError> handleMalformedRequest(HttpServletRequest request) {
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, "VALIDATION_ERROR", "Revise los datos enviados.", request);
+    }
+
+    @ExceptionHandler(AdministrationException.class)
+    ResponseEntity<ApiError> handleAdministration(AdministrationException exception, HttpServletRequest request) {
+        return error(exception.status(), exception.code(), "La operación no puede completarse.", request);
     }
 
     @ExceptionHandler(IllegalStateException.class)

@@ -1,8 +1,8 @@
 package com.cvmatcher.cv_matcher_backend;
 
-import com.cvmatcher.cv_matcher_backend.identity.application.JwtService;
-import com.cvmatcher.cv_matcher_backend.identity.application.IdentityService;
 import com.cvmatcher.cv_matcher_backend.identity.SecurityProperties;
+import com.cvmatcher.cv_matcher_backend.identity.application.IdentityService;
+import com.cvmatcher.cv_matcher_backend.identity.application.JwtService;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.mail.NoopMailGateway;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.Cookie;
@@ -11,37 +11,33 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.mock.web.MockHttpServletRequest;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
-import java.util.UUID;
-import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -338,7 +334,7 @@ class RegistrationIntegrationTest {
     @Test
     void resetsPasswordAndRevokesAllExistingSessions() throws Exception {
         var userId = insertActiveUser("reset-sessions@example.test", false);
-        insertSession(userId, "reset-session-token");
+        var sessionId = insertSession(userId, "reset-session-token");
         var actionToken = "password-reset-action-token";
         insertActionToken(userId, actionToken, "PASSWORD_RESET", null, Instant.now().plusSeconds(300));
 
@@ -351,12 +347,14 @@ class RegistrationIntegrationTest {
         assertTrue(Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8().matches("NuevaClave1", passwordHash));
         assertEquals(0L, jdbc.queryForObject("select count(*) from user_session where user_id=? and revoked_at is null", Long.class, userId));
         assertEquals(1L, jdbc.queryForObject("select count(*) from audit_event where action='PASSWORD_RESET_COMPLETED' and target_id=?", Long.class, userId));
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(userId, "RECRUITER", sessionId)))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
     void changesPasswordAndRevokesAllExistingSessions() throws Exception {
         var userId = insertActiveUser("password-change-sessions@example.test", true);
-        insertSession(userId, "password-change-session-token");
+        var sessionId = insertSession(userId, "password-change-session-token");
 
         mockMvc.perform(post("/api/v1/auth/password/change")
                         .header("Authorization", "Bearer " + jwt.issue(userId, "RECRUITER", UUID.randomUUID()))
@@ -369,12 +367,14 @@ class RegistrationIntegrationTest {
         assertFalse(jdbc.queryForObject("select force_password_change from user_account where id=?", Boolean.class, userId));
         assertEquals(0L, jdbc.queryForObject("select count(*) from user_session where user_id=? and revoked_at is null", Long.class, userId));
         assertEquals(1L, jdbc.queryForObject("select count(*) from audit_event where action='PASSWORD_CHANGED' and target_id=?", Long.class, userId));
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(userId, "RECRUITER", sessionId)))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
     void confirmsEmailChangeAndRevokesAllExistingSessions() throws Exception {
         var userId = insertActiveUser("email-change-sessions@example.test", false);
-        insertSession(userId, "email-change-session-token");
+        var sessionId = insertSession(userId, "email-change-session-token");
         var actionToken = "email-change-action-token";
         var newEmail = "email-change-updated@example.test";
         insertActionToken(userId, actionToken, "EMAIL_CHANGE", newEmail, Instant.now().plusSeconds(300));
@@ -387,6 +387,8 @@ class RegistrationIntegrationTest {
         assertEquals(newEmail, jdbc.queryForObject("select email_normalized from user_account where id=?", String.class, userId));
         assertEquals(0L, jdbc.queryForObject("select count(*) from user_session where user_id=? and revoked_at is null", Long.class, userId));
         assertEquals(1L, jdbc.queryForObject("select count(*) from audit_event where action='EMAIL_CHANGED' and target_id=?", Long.class, userId));
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(userId, "RECRUITER", sessionId)))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -657,6 +659,10 @@ class RegistrationIntegrationTest {
         var cookies = login.getHeaders(HttpHeaders.SET_COOKIE);
         var refresh = cookieValue(cookies, "cv_refresh");
         var csrf = cookieValue(cookies, "XSRF-TOKEN");
+        var sessionId = jdbc.queryForObject("select id from user_session where refresh_token_hash=?", UUID.class, hash(refresh));
+
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(userId, "RECRUITER", sessionId)))
+                .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/v1/auth/logout")
                         .cookie(new Cookie("cv_refresh", refresh), new Cookie("XSRF-TOKEN", csrf))
@@ -664,6 +670,8 @@ class RegistrationIntegrationTest {
                 .andExpect(status().isNoContent());
 
         assertEquals(1L, jdbc.queryForObject("select count(*) from audit_event where action='LOGOUT' and target_id=?", Long.class, userId));
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(userId, "RECRUITER", sessionId)))
+                .andExpect(status().isUnauthorized());
     }
 
     private void register(String email) throws Exception {
@@ -714,11 +722,13 @@ class RegistrationIntegrationTest {
         );
     }
 
-    private void insertSession(UUID userId, String rawToken) {
+    private UUID insertSession(UUID userId, String rawToken) {
+        var sessionId = UUID.randomUUID();
         jdbc.update(
                 "insert into user_session(id,user_id,refresh_token_hash,expires_at,created_at) values(?,?,?,?,?)",
-                UUID.randomUUID(), userId, hash(rawToken), Timestamp.from(Instant.now().plusSeconds(300)), Timestamp.from(Instant.now())
+                sessionId, userId, hash(rawToken), Timestamp.from(Instant.now().plusSeconds(300)), Timestamp.from(Instant.now())
         );
+        return sessionId;
     }
 
     private Callable<Boolean> confirmEmailChange(String rawToken, CountDownLatch ready, CountDownLatch start) {

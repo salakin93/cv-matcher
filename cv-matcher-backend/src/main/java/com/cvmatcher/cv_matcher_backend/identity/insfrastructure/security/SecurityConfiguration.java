@@ -1,7 +1,7 @@
 package com.cvmatcher.cv_matcher_backend.identity.insfrastructure.security;
 
-import com.cvmatcher.cv_matcher_backend.identity.api.ApiError;
 import com.cvmatcher.cv_matcher_backend.identity.CorsProperties;
+import com.cvmatcher.cv_matcher_backend.identity.api.ApiError;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -51,7 +51,7 @@ public class SecurityConfiguration {
                         "/v3/api-docs/**",
                         "/swagger-ui.html",
                         "/swagger-ui/**"
-                ).permitAll().anyRequest().authenticated())
+                ).permitAll().requestMatchers("/api/v1/admin/**").hasRole("ADMIN").anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, exception) ->
                                 write(mapper, request, response, 401, "UNAUTHENTICATED", "No autenticado"))

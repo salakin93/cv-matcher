@@ -29,8 +29,12 @@ springdoc:
     path: /swagger-ui.html
 
 logging:
-  pattern:
-    level: "%5p [correlationId:%X{correlationId:-}]"
+  structured:
+    format:
+      console: logstash
+    json:
+      add:
+        correlationId: "%X{correlationId:-}"
 
 app:
   security:
