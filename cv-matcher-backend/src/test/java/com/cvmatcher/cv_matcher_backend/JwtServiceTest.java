@@ -40,4 +40,12 @@ class JwtServiceTest {
 
         assertThrows(IllegalArgumentException.class, () -> service.verify(service.issue(UUID.randomUUID(), "RECRUITER", UUID.randomUUID())));
     }
+
+    @Test
+    void rejectsAnAccessTokenAtItsExactExpirationSecond() {
+        var properties = new SecurityProperties("a".repeat(32), 0, 8, 24, 30, "", "", false);
+        var service = new JwtService(properties, new ObjectMapper());
+
+        assertThrows(IllegalArgumentException.class, () -> service.verify(service.issue(UUID.randomUUID(), "RECRUITER", UUID.randomUUID())));
+    }
 }

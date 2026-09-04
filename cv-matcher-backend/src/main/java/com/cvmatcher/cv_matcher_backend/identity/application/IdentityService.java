@@ -3,6 +3,8 @@ package com.cvmatcher.cv_matcher_backend.identity.application;
 import com.cvmatcher.cv_matcher_backend.identity.SecurityProperties;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ import java.util.UUID;
 
 @Service
 public class IdentityService {
+    private static final Logger log = LoggerFactory.getLogger(IdentityService.class);
     private final JdbcTemplate jdbc;
     private final MailGateway mail;
     private final SecurityProperties props;
@@ -52,7 +55,7 @@ public class IdentityService {
     @Transactional
     public void confirm(String raw, String purpose, String password) {
         var row = jdbc.queryForList("select id,user_id,target_email,expires_at,consumed_at,purpose from account_action_token where token_hash=?", hash(raw)).stream().findFirst().orElse(null);
-        if (row == null || !purpose.equals(row.get("purpose")) || ((java.sql.Timestamp) row.get("expires_at")).toInstant().isBefore(Instant.now()) || row.get("consumed_at") != null)
+        if (row == null || !purpose.equals(row.get("purpose")) || !((java.sql.Timestamp) row.get("expires_at")).toInstant().isAfter(Instant.now()) || row.get("consumed_at") != null)
             throw new IllegalArgumentException("Invalid or expired token");
         var user = UUID.fromString(row.get("user_id").toString());
         if ("EMAIL_VERIFICATION".equals(purpose)) {
@@ -86,6 +89,7 @@ public class IdentityService {
 
         if (user == null) {
             count("identity.logins", "outcome", "failure");
+            logFailure("INVALID_CREDENTIALS", null);
             throw new SecurityException("Invalid credentials");
         }
 
@@ -94,6 +98,7 @@ public class IdentityService {
 
         if (locked != null && locked.toInstant().isAfter(Instant.now())) {
             count("identity.logins", "outcome", "locked");
+            logFailure("ACCOUNT_LOCKED", id);
             throw new SecurityException("Invalid credentials");
         }
 
@@ -114,6 +119,7 @@ public class IdentityService {
             if (attempts == 5) audit(id, "LOGIN_LOCKED", id);
             if (attempts == 5) count("identity.login.locks");
             count("identity.logins", "outcome", "failure");
+            logFailure("INVALID_CREDENTIALS", id);
 
             throw new SecurityException("Invalid credentials");
         }
@@ -154,6 +160,7 @@ public class IdentityService {
         var s = jdbc.queryForList("select s.*,u.full_name,u.email,u.role,u.status,u.force_password_change from user_session s join user_account u on u.id=s.user_id where s.refresh_token_hash=?", hash(raw)).stream().findFirst().orElse(null);
         if (s == null) {
             count("identity.refreshes", "outcome", "failure");
+            logFailure("INVALID_SESSION", null);
             throw new SecurityException("Invalid session");
         }
         var user = UUID.fromString(s.get("user_id").toString());
@@ -161,10 +168,12 @@ public class IdentityService {
             revokeAll(user);
             audit(user, "REFRESH_TOKEN_REUSE", user);
             count("identity.refreshes", "outcome", "reused");
+            logFailure("REFRESH_TOKEN_REUSE", user);
             throw new SecurityException("Invalid session");
         }
-        if (!"ACTIVE".equals(s.get("status")) || ((java.sql.Timestamp) s.get("expires_at")).toInstant().isBefore(Instant.now())) {
+        if (!"ACTIVE".equals(s.get("status")) || !((java.sql.Timestamp) s.get("expires_at")).toInstant().isAfter(Instant.now())) {
             count("identity.refreshes", "outcome", "failure");
+            logFailure("INVALID_SESSION", user);
             throw new SecurityException("Invalid session");
         }
         var next = random();
@@ -172,6 +181,7 @@ public class IdentityService {
         if (jdbc.update("update user_session set revoked_at=? where id=? and revoked_at is null", timestamp(Instant.now()), id) != 1) {
             revokeAll(user);
             count("identity.refreshes", "outcome", "reused");
+            logFailure("REFRESH_TOKEN_REUSE", user);
             throw new SecurityException("Invalid session");
         }
         var nextId = UUID.randomUUID();
@@ -264,6 +274,7 @@ public class IdentityService {
             count("identity.mail", "outcome", "sent", "purpose", purpose);
         } catch (RuntimeException exception) {
             count("identity.mail", "outcome", "failure", "purpose", purpose);
+            logFailure("MAIL_DELIVERY_FAILED", id);
             throw exception;
         }
     }
@@ -293,10 +304,15 @@ public class IdentityService {
 
     private void audit(UUID actor, String action, UUID target) {
         jdbc.update("insert into audit_event(id,actor_user_id,action,target_type,target_id,correlation_id,created_at) values(?,?,?,'USER_ACCOUNT',?,?,?)", UUID.randomUUID(), actor, action, target, correlationId(), timestamp(Instant.now()));
+        log.info("identity_event action={} actorUserId={} targetUserId={} correlationId={}", action, actor, target, correlationId());
     }
 
     private void count(String name, String... tags) {
         metrics.counter(name, tags).increment();
+    }
+
+    private void logFailure(String error, UUID userId) {
+        log.warn("identity_failure error={} userId={} correlationId={}", error, userId, correlationId());
     }
 
     private String eventForTokenConfirmation(String purpose) {

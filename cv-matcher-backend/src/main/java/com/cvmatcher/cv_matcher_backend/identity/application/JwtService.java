@@ -43,7 +43,7 @@ public class JwtService {
             if (parts.length != 3 || !constantTime(parts[2], sign(parts[0] + "." + parts[1])))
                 throw new IllegalArgumentException("Invalid token");
             var payload = objectMapper.readValue(Base64.getUrlDecoder().decode(parts[1]), Map.class);
-            if (((Number) payload.get("exp")).longValue() < Instant.now().getEpochSecond())
+            if (((Number) payload.get("exp")).longValue() <= Instant.now().getEpochSecond())
                 throw new IllegalArgumentException("Expired token");
             return payload;
         } catch (Exception exception) {

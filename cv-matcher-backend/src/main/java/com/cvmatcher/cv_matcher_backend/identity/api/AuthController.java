@@ -176,7 +176,8 @@ public class AuthController {
             @ApiResponse(responseCode = "202", description = "Solicitud aceptada"),
             @ApiResponse(responseCode = "422", description = "Datos inválidos", content = @Content(schema = @Schema(implementation = ApiError.class))),
             @ApiResponse(responseCode = "401", description = "Bearer JWT o contraseña actual inválidos", content = @Content(schema = @Schema(implementation = ApiError.class))),
-            @ApiResponse(responseCode = "403", description = "Debe cambiar contraseña", content = @Content(schema = @Schema(implementation = ApiError.class)))
+            @ApiResponse(responseCode = "403", description = "Debe cambiar contraseña", content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "409", description = "Correo ya utilizado", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public void emailChangeRequest(@org.springframework.security.core.annotation.AuthenticationPrincipal UUID userId, @Valid @RequestBody EmailChangeRequest request) {
         service.requestEmailChange(userId, request.currentPassword(), request.email());
