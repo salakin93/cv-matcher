@@ -32,10 +32,12 @@ import java.util.UUID;
 public class AuthController {
     private final IdentityService service;
     private final boolean secureCookies;
+    private final long accessTokenExpiresIn;
 
     public AuthController(IdentityService service, SecurityProperties properties) {
         this.service = service;
         this.secureCookies = properties.secureCookies();
+        this.accessTokenExpiresIn = properties.accessTokenMinutes() * 60;
     }
 
     @PostMapping("/register")
@@ -51,7 +53,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    @Operation(summary = "Iniciar sesión", description = "Devuelve un access token y establece cookies cv_refresh y XSRF-TOKEN.")
+    @Operation(summary = "Iniciar sesión", description = "Devuelve access token, expiración e identidad segura; establece cookies cv_refresh y XSRF-TOKEN.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Sesión creada", headers = @Header(name = "Set-Cookie", description = "Cookies cv_refresh y XSRF-TOKEN", schema = @Schema(type = "string")), content = @Content(schema = @Schema(implementation = TokenResponse.class))),
             @ApiResponse(responseCode = "422", description = "Datos de login inválidos", content = @Content(schema = @Schema(implementation = ApiError.class))),
@@ -61,7 +63,7 @@ public class AuthController {
         var login = service.login(request.email(), request.password());
         refreshCookie(response, login.refreshToken(), Duration.ofHours(8));
         csrfCookie(response, Duration.ofHours(8));
-        return new TokenResponse(login.accessToken(), "Bearer", login.forcePasswordChange());
+        return tokenResponse(login);
     }
 
     @PostMapping("/refresh")
@@ -77,7 +79,7 @@ public class AuthController {
         var login = service.refresh(refresh);
         refreshCookie(response, login.refreshToken(), Duration.ofHours(8));
         csrfCookie(response, Duration.ofHours(8));
-        return new TokenResponse(login.accessToken(), "Bearer", login.forcePasswordChange());
+        return tokenResponse(login);
     }
 
     @PostMapping("/logout")
@@ -197,6 +199,10 @@ public class AuthController {
         cookie(response, "cv_refresh", value, true, maxAge);
     }
 
+    private TokenResponse tokenResponse(IdentityService.Login login) {
+        return new TokenResponse(login.accessToken(), "Bearer", accessTokenExpiresIn, login.user(), login.user().forcePasswordChange());
+    }
+
     private void csrfCookie(HttpServletResponse response, Duration maxAge) {
         cookie(response, "XSRF-TOKEN", maxAge.isZero() ? "" : randomToken(), false, maxAge);
     }
@@ -258,6 +264,8 @@ public class AuthController {
     record TokenResponse(
             @Schema(example = "eyJhbGciOiJIUzI1NiJ9...") String accessToken,
             @Schema(example = "Bearer") String tokenType,
+            @Schema(example = "900") long expiresIn,
+            IdentityService.UserInfo user,
             @Schema(example = "false") boolean forcePasswordChange
     ) {
     }

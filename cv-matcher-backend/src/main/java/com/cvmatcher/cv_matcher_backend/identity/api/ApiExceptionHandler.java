@@ -1,14 +1,17 @@
 package com.cvmatcher.cv_matcher_backend.identity.api;
 
 import com.cvmatcher.cv_matcher_backend.identity.application.PasswordPolicyException;
+import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @RestControllerAdvice
 class ApiExceptionHandler {
@@ -43,6 +46,11 @@ class ApiExceptionHandler {
         return error(HttpStatus.CONFLICT, "CONFLICT", "La operación no puede completarse.", request);
     }
 
+    @ExceptionHandler(DuplicateKeyException.class)
+    ResponseEntity<ApiError> handleDuplicateKey(HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "CONFLICT", "La operación no puede completarse.", request);
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> handleUnexpected(HttpServletRequest request) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Ocurrió un error inesperado.", request);
@@ -50,7 +58,12 @@ class ApiExceptionHandler {
 
     private ResponseEntity<ApiError> error(HttpStatus status, String code, String message, HttpServletRequest request) {
         return ResponseEntity.status(status)
-                .body(new ApiError(status.value(), code, message, Instant.now(), request.getRequestURI()));
+                .body(new ApiError(status.value(), code, message, Instant.now(), request.getRequestURI(), correlationId(request)));
+    }
+
+    private UUID correlationId(HttpServletRequest request) {
+        var value = request.getAttribute(CorrelationIdFilter.ATTRIBUTE);
+        return value instanceof UUID correlationId ? correlationId : null;
     }
 
 }

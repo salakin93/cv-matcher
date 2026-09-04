@@ -134,14 +134,13 @@ public class IdentityService {
                 jwt.issue(id, role, sessionId),
                 refreshToken,
                 sessionId,
-                role,
-                forcePasswordChange
+                new UserInfo(id, (String) user.get("full_name"), (String) user.get("email"), role, status, forcePasswordChange)
         );
     }
 
     @Transactional(noRollbackFor = SecurityException.class)
     public Login refresh(String raw) {
-        var s = jdbc.queryForList("select s.*,u.role,u.force_password_change from user_session s join user_account u on u.id=s.user_id where s.refresh_token_hash=?", hash(raw)).stream().findFirst().orElse(null);
+        var s = jdbc.queryForList("select s.*,u.full_name,u.email,u.role,u.status,u.force_password_change from user_session s join user_account u on u.id=s.user_id where s.refresh_token_hash=?", hash(raw)).stream().findFirst().orElse(null);
         if (s == null) throw new SecurityException("Invalid session");
         var user = UUID.fromString(s.get("user_id").toString());
         if (s.get("revoked_at") != null) {
@@ -149,7 +148,7 @@ public class IdentityService {
             audit(user, "REFRESH_TOKEN_REUSE", user);
             throw new SecurityException("Invalid session");
         }
-        if (((java.sql.Timestamp) s.get("expires_at")).toInstant().isBefore(Instant.now()))
+        if (!"ACTIVE".equals(s.get("status")) || ((java.sql.Timestamp) s.get("expires_at")).toInstant().isBefore(Instant.now()))
             throw new SecurityException("Invalid session");
         var next = random();
         var id = UUID.fromString(s.get("id").toString());
@@ -160,7 +159,14 @@ public class IdentityService {
         var nextId = UUID.randomUUID();
         jdbc.update("insert into user_session(id,user_id,refresh_token_hash,expires_at,created_at) values(?,?,?,?,?)", nextId, user, hash(next), s.get("expires_at"), timestamp(Instant.now()));
         audit(user, "REFRESH_ROTATED", user);
-        return new Login(jwt.issue(user, (String) s.get("role"), nextId), next, nextId, (String) s.get("role"), Boolean.TRUE.equals(s.get("force_password_change")));
+        var role = (String) s.get("role");
+        var forcePasswordChange = Boolean.TRUE.equals(s.get("force_password_change"));
+        return new Login(
+                jwt.issue(user, role, nextId),
+                next,
+                nextId,
+                new UserInfo(user, (String) s.get("full_name"), (String) s.get("email"), role, (String) s.get("status"), forcePasswordChange)
+        );
     }
 
     @Transactional
@@ -305,8 +311,7 @@ public class IdentityService {
             throw new PasswordPolicyException();
     }
 
-    public record Login(String accessToken, String refreshToken, UUID sessionId, String role,
-                        boolean forcePasswordChange) {
+    public record Login(String accessToken, String refreshToken, UUID sessionId, UserInfo user) {
     }
 
     public record UserInfo(UUID id, String fullName, String email, String role, String status,

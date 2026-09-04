@@ -1,5 +1,7 @@
 package com.cvmatcher.cv_matcher_backend.identity.insfrastructure.security;
 
+import com.cvmatcher.cv_matcher_backend.identity.api.ApiError;
+import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,7 +14,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class PasswordChangeRequiredFilter extends OncePerRequestFilter {
@@ -29,12 +31,15 @@ public class PasswordChangeRequiredFilter extends OncePerRequestFilter {
         if (authentication != null && Boolean.TRUE.equals(authentication.getDetails()) && !isAllowed(request)) {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            objectMapper.writeValue(response.getOutputStream(), Map.of(
-                    "status", HttpServletResponse.SC_FORBIDDEN,
-                    "code", "PASSWORD_CHANGE_REQUIRED",
-                    "message", "Debe cambiar su contraseña antes de continuar.",
-                    "timestamp", Instant.now().toString(),
-                    "path", request.getRequestURI()
+            var value = request.getAttribute(CorrelationIdFilter.ATTRIBUTE);
+            var correlationId = value instanceof UUID uuid ? uuid : null;
+            objectMapper.writeValue(response.getOutputStream(), new ApiError(
+                    HttpServletResponse.SC_FORBIDDEN,
+                    "PASSWORD_CHANGE_REQUIRED",
+                    "Debe cambiar su contraseña antes de continuar.",
+                    Instant.now(),
+                    request.getRequestURI(),
+                    correlationId
             ));
             return;
         }

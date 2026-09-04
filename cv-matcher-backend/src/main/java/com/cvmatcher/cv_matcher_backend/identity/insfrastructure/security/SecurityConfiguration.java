@@ -1,5 +1,7 @@
 package com.cvmatcher.cv_matcher_backend.identity.insfrastructure.security;
 
+import com.cvmatcher.cv_matcher_backend.identity.api.ApiError;
+import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
@@ -19,7 +21,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
-import java.util.Map;
+import java.util.UUID;
 
 @Configuration
 @EnableWebSecurity
@@ -51,9 +53,9 @@ public class SecurityConfiguration {
                 ).permitAll().anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, exception) ->
-                                write(mapper, request, response, 401, "No autenticado"))
+                                write(mapper, request, response, 401, "UNAUTHENTICATED", "No autenticado"))
                         .accessDeniedHandler((request, response, exception) ->
-                                write(mapper, request, response, 403,
+                                write(mapper, request, response, 403, "FORBIDDEN",
                                         "No tiene permisos para realizar esta operación.")))
                 .addFilterBefore(bearer, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(passwordChangeRequired, BearerJwtAuthenticationFilter.class);
@@ -77,19 +79,14 @@ public class SecurityConfiguration {
             HttpServletRequest request,
             HttpServletResponse response,
             int status,
+            String code,
             String message
     ) throws java.io.IOException {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
-        mapper.writeValue(
-                response.getOutputStream(),
-                Map.of(
-                        "status", status,
-                        "message", message,
-                        "timestamp", Instant.now().toString(),
-                        "path", request.getRequestURI()
-                )
-        );
+        var value = request.getAttribute(CorrelationIdFilter.ATTRIBUTE);
+        var correlationId = value instanceof UUID uuid ? uuid : null;
+        mapper.writeValue(response.getOutputStream(), new ApiError(status, code, message, Instant.now(), request.getRequestURI(), correlationId));
     }
 }
