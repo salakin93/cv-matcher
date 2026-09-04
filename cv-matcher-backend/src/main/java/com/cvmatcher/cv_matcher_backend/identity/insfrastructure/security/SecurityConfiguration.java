@@ -1,6 +1,7 @@
 package com.cvmatcher.cv_matcher_backend.identity.insfrastructure.security;
 
 import com.cvmatcher.cv_matcher_backend.identity.api.ApiError;
+import com.cvmatcher.cv_matcher_backend.identity.CorsProperties;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -63,9 +64,12 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    CorsConfigurationSource corsConfigurationSource() {
+    CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
+        if (properties.allowedOrigins() == null || properties.allowedOrigins().isEmpty()) {
+            throw new IllegalStateException("At least one CORS origin must be configured");
+        }
         var c = new CorsConfiguration();
-        c.setAllowedOrigins(java.util.List.of("http://localhost:5173"));
+        c.setAllowedOrigins(properties.allowedOrigins());
         c.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         c.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type", "X-CSRF-TOKEN"));
         c.setAllowCredentials(true);

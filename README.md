@@ -21,3 +21,5 @@ Aplicación para automatizar la preselección de candidatos mediante análisis d
 - `test` usa `NoopMailGateway`, datos aislados de prueba y cookies no seguras.
 - `prod` exige variables de entorno para secretos, obliga cookies `Secure` y usa
   un gateway de correo explícitamente no configurado hasta la spec SMTP.
+- `prod` requiere `CORS_ALLOWED_ORIGINS` con los orígenes HTTPS autorizados,
+  separados por comas.

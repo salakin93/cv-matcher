@@ -2,6 +2,8 @@ package com.cvmatcher.cv_matcher_backend;
 
 import com.cvmatcher.cv_matcher_backend.identity.application.JwtService;
 import com.cvmatcher.cv_matcher_backend.identity.application.IdentityService;
+import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.mail.NoopMailGateway;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,9 +12,12 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -51,6 +56,15 @@ class RegistrationIntegrationTest {
     @Autowired
     private IdentityService identityService;
 
+    @Autowired
+    private NoopMailGateway mailGateway;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
+
+    @Autowired
+    private CorsConfigurationSource corsConfigurationSource;
+
     @Test
     void registersAnAccountWithPostgresTimestamps() throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
@@ -63,6 +77,59 @@ class RegistrationIntegrationTest {
                                 }
                                 """))
                 .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void recordsTheTypedMailCommandAndRegistrationMetric() throws Exception {
+        var email = "mail-command@example.test";
+        mailGateway.clear();
+        var registrations = meterRegistry.counter("identity.registrations").count();
+
+        register(email);
+
+        var command = mailGateway.sentCommands().getFirst();
+        assertEquals(com.cvmatcher.cv_matcher_backend.identity.application.MailGateway.Purpose.EMAIL_VERIFICATION, command.purpose());
+        assertEquals(email, command.recipient());
+        assertFalse(command.opaqueToken().isBlank());
+        assertEquals(registrations + 1, meterRegistry.counter("identity.registrations").count());
+    }
+
+    @Test
+    void keepsRegistrationNeutralWhenConcurrentRequestsUseTheSameEmail() throws Exception {
+        var email = "concurrent-registration@example.test";
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        Callable<Integer> register = () -> {
+            ready.countDown();
+            start.await();
+            return mockMvc.perform(post("/api/v1/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"fullName\":\"Recruiter Test\",\"email\":\"%s\",\"password\":\"ClaveSegura1\"}".formatted(email)))
+                    .andReturn()
+                    .getResponse()
+                    .getStatus();
+        };
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(register);
+            var second = executor.submit(register);
+            assertTrue(ready.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            start.countDown();
+            assertEquals(HttpStatus.ACCEPTED.value(), first.get());
+            assertEquals(HttpStatus.ACCEPTED.value(), second.get());
+        }
+
+        assertEquals(1L, jdbc.queryForObject("select count(*) from user_account where email_normalized=?", Long.class, email));
+    }
+
+    @Test
+    void appliesTheConfiguredCorsOriginOnly() {
+        var request = new MockHttpServletRequest();
+        request.setRequestURI("/api/v1/auth/login");
+
+        var configuration = corsConfigurationSource.getCorsConfiguration(request);
+
+        assertEquals(List.of("http://localhost:5173"), configuration.getAllowedOrigins());
     }
 
     @Test
@@ -196,6 +263,19 @@ class RegistrationIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.correlationId").isNotEmpty());
+    }
+
+    @Test
+    void recognizesAdminAndRecruiterRolesFromThePersistedAccount() throws Exception {
+        var adminId = insertUser("admin-role@example.test", "ACTIVE", false, "ADMIN");
+        var recruiterId = insertActiveUser("recruiter-role@example.test", false);
+
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(adminId, "RECRUITER", UUID.randomUUID())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("ADMIN"));
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(recruiterId, "ADMIN", UUID.randomUUID())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("RECRUITER"));
     }
 
     @Test
@@ -423,6 +503,35 @@ class RegistrationIntegrationTest {
     }
 
     @Test
+    void locksAnAccountWhenFiveFailedLoginsArriveConcurrently() throws Exception {
+        var email = "concurrent-lock@example.test";
+        var userId = insertActiveUser(email, false);
+        var ready = new CountDownLatch(5);
+        var start = new CountDownLatch(1);
+        Callable<Integer> login = () -> {
+            ready.countDown();
+            start.await();
+            return mockMvc.perform(post("/api/v1/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"email\":\"%s\",\"password\":\"Incorrecta1\"}".formatted(email)))
+                    .andReturn()
+                    .getResponse()
+                    .getStatus();
+        };
+
+        try (var executor = Executors.newFixedThreadPool(5)) {
+            var results = new java.util.ArrayList<java.util.concurrent.Future<Integer>>();
+            for (var attempt = 0; attempt < 5; attempt++) results.add(executor.submit(login));
+            assertTrue(ready.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            start.countDown();
+            for (var result : results) assertEquals(HttpStatus.UNAUTHORIZED.value(), result.get());
+        }
+
+        assertEquals(5, jdbc.queryForObject("select failed_login_attempts from user_account where id=?", Integer.class, userId));
+        assertTrue(jdbc.queryForObject("select locked_until is not null from user_account where id=?", Boolean.class, userId));
+    }
+
+    @Test
     void rejectsMissingCsrfAndRevokesAllSessionsWhenARefreshTokenIsReused() throws Exception {
         var email = "refresh-reuse@example.test";
         var userId = insertActiveUser(email, false);
@@ -491,19 +600,24 @@ class RegistrationIntegrationTest {
     }
 
     private UUID insertActiveUser(String email, boolean forcePasswordChange) {
-        return insertUser(email, "ACTIVE", forcePasswordChange);
+        return insertUser(email, "ACTIVE", forcePasswordChange, "RECRUITER");
     }
 
     private UUID insertUser(String email, String status, boolean forcePasswordChange) {
+        return insertUser(email, status, forcePasswordChange, "RECRUITER");
+    }
+
+    private UUID insertUser(String email, String status, boolean forcePasswordChange, String role) {
         var id = UUID.randomUUID();
         var now = Timestamp.from(Instant.now());
         jdbc.update(
-                "insert into user_account(id,full_name,email,email_normalized,password_hash,role,status,email_verified_at,force_password_change,created_at,updated_at) values(?,?,?,?,?,'RECRUITER',?,?,?,?,?)",
+                "insert into user_account(id,full_name,email,email_normalized,password_hash,role,status,email_verified_at,force_password_change,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?)",
                 id,
                 "Recruiter Test",
                 email,
                 email,
                 Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8().encode("ClaveSegura1"),
+                role,
                 status,
                 "ACTIVE".equals(status) ? now : null,
                 forcePasswordChange,

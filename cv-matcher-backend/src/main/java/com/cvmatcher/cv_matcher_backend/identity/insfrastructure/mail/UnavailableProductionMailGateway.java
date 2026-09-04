@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 @Profile("prod")
 public class UnavailableProductionMailGateway implements MailGateway {
     @Override
-    public void send(String purpose, String email, String opaqueToken) {
+    public void send(MailCommand command) {
         throw new IllegalStateException("Production mail delivery is not configured");
     }
 }
