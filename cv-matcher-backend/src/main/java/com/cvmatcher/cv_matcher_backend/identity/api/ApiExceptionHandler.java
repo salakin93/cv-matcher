@@ -4,6 +4,7 @@ import com.cvmatcher.cv_matcher_backend.identity.application.PasswordPolicyExcep
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -32,6 +33,16 @@ class ApiExceptionHandler {
         return error(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Credenciales inválidas.", request);
     }
 
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    ResponseEntity<ApiError> handleRequestValidation(HttpServletRequest request) {
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, "VALIDATION_ERROR", "Revise los datos enviados.", request);
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    ResponseEntity<ApiError> handleConflict(HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "CONFLICT", "La operación no puede completarse.", request);
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> handleUnexpected(HttpServletRequest request) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Ocurrió un error inesperado.", request);
@@ -42,6 +53,4 @@ class ApiExceptionHandler {
                 .body(new ApiError(status.value(), code, message, Instant.now(), request.getRequestURI()));
     }
 
-    record ApiError(int status, String code, String message, Instant timestamp, String path) {
-    }
 }

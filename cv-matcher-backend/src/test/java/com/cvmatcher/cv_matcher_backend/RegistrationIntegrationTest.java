@@ -14,6 +14,7 @@ import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -55,6 +56,21 @@ class RegistrationIntegrationTest {
     }
 
     @Test
+    void rejectsMalformedRequestsWithTheDocumentedValidationError() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": "",
+                                  "email": "not-an-email",
+                                  "password": ""
+                                }
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
     void recordsTheRequestCorrelationIdInTheAuditEvent() throws Exception {
         var email = "correlated-registration@example.test";
         var response = mockMvc.perform(post("/api/v1/auth/register")
@@ -77,6 +93,17 @@ class RegistrationIntegrationTest {
                 email
         );
         assertEquals(UUID.fromString(correlationId), persistedCorrelationId);
+    }
+
+    @Test
+    void documentsPublicAndBearerProtectedIdentityOperations() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+                .andExpect(jsonPath("$.components.schemas.ApiError").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/login'].post.security").doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/me'].get.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/refresh'].post.parameters").isArray());
     }
 
     @Test
