@@ -54,7 +54,7 @@ class InitialAdminBootstrapTest {
 
         new InitialAdminBootstrap(jdbc, properties, environment).run(new DefaultApplicationArguments(new String[0]));
 
-        verify(jdbc).update(startsWith("insert into user_account"), (Object[]) any());
-        verify(jdbc).update(startsWith("insert into audit_event"), (Object[]) any());
+        verify(jdbc).update(startsWith("insert into user_account"), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(jdbc).update(startsWith("insert into audit_event"), any(), any(), any());
     }
 }

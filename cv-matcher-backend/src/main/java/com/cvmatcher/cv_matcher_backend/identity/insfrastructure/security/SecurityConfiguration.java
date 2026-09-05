@@ -1,6 +1,7 @@
 package com.cvmatcher.cv_matcher_backend.identity.insfrastructure.security;
 
 import com.cvmatcher.cv_matcher_backend.identity.CorsProperties;
+import com.cvmatcher.cv_matcher_backend.identity.SecurityProperties;
 import com.cvmatcher.cv_matcher_backend.identity.api.ApiError;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,6 +17,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -28,15 +30,27 @@ import java.util.UUID;
 @EnableWebSecurity
 public class SecurityConfiguration {
     @Bean
+    CookieCsrfTokenRepository csrfTokenRepository(SecurityProperties properties) {
+        var repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setHeaderName("X-CSRF-TOKEN");
+        repository.setCookiePath("/api/v1/auth");
+        repository.setCookieCustomizer(cookie -> cookie
+                .sameSite("Lax")
+                .secure(properties.secureCookies()));
+        return repository;
+    }
+
+    @Bean
     SecurityFilterChain security(
             HttpSecurity http,
             BearerJwtAuthenticationFilter bearer,
             PasswordChangeRequiredFilter passwordChangeRequired,
+            CookieCsrfTokenRepository csrfTokenRepository,
             ObjectMapper mapper
     ) throws Exception {
-        var csrf = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        csrf.setHeaderName("X-CSRF-TOKEN");
-        http.csrf(c -> c.csrfTokenRepository(csrf).requireCsrfProtectionMatcher(r -> HttpMethod.POST.name().equals(r.getMethod()) && ("/api/v1/auth/refresh".equals(r.getRequestURI()) || "/api/v1/auth/logout".equals(r.getRequestURI()))))
+        http.csrf(c -> c.csrfTokenRepository(csrfTokenRepository)
+                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                        .requireCsrfProtectionMatcher(r -> HttpMethod.POST.name().equals(r.getMethod()) && ("/api/v1/auth/refresh".equals(r.getRequestURI()) || "/api/v1/auth/logout".equals(r.getRequestURI()))))
                 .cors(Customizer.withDefaults()).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a.requestMatchers(
                         "/error",

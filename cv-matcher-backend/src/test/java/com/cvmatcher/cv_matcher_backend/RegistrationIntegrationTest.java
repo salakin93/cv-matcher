@@ -276,11 +276,13 @@ class RegistrationIntegrationTest {
     void recognizesAdminAndRecruiterRolesFromThePersistedAccount() throws Exception {
         var adminId = insertUser("admin-role@example.test", "ACTIVE", false, "ADMIN");
         var recruiterId = insertActiveUser("recruiter-role@example.test", false);
+        var adminSession = insertSession(adminId, "admin-role-session-token");
+        var recruiterSession = insertSession(recruiterId, "recruiter-role-session-token");
 
-        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(adminId, "RECRUITER", UUID.randomUUID())))
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(adminId, "RECRUITER", adminSession)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("ADMIN"));
-        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(recruiterId, "ADMIN", UUID.randomUUID())))
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt.issue(recruiterId, "ADMIN", recruiterSession)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("RECRUITER"));
     }
@@ -357,7 +359,7 @@ class RegistrationIntegrationTest {
         var sessionId = insertSession(userId, "password-change-session-token");
 
         mockMvc.perform(post("/api/v1/auth/password/change")
-                        .header("Authorization", "Bearer " + jwt.issue(userId, "RECRUITER", UUID.randomUUID()))
+                        .header("Authorization", "Bearer " + jwt.issue(userId, "RECRUITER", sessionId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"currentPassword\":\"ClaveSegura1\",\"newPassword\":\"NuevaClave1\"}"))
                 .andExpect(status().isNoContent());
@@ -421,9 +423,10 @@ class RegistrationIntegrationTest {
                 now,
                 now
         );
+        var sessionId = insertSession(userId, "force-change-session-token");
 
         mockMvc.perform(post("/api/v1/auth/email-change/request")
-                        .header("Authorization", "Bearer " + jwt.issue(userId, "ADMIN", UUID.randomUUID()))
+                        .header("Authorization", "Bearer " + jwt.issue(userId, "ADMIN", sessionId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

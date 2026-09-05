@@ -31,7 +31,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -161,6 +160,7 @@ class AccountAdministrationIntegrationTest {
                 .andReturn()
                 .getResponse();
         var refresh = cookieValue(login.getHeaders(HttpHeaders.SET_COOKIE), "cv_refresh");
+        var csrf = cookieValue(login.getHeaders(HttpHeaders.SET_COOKIE), "XSRF-TOKEN");
         var targetSession = jdbc.queryForObject("select id from user_session where refresh_token_hash=?", UUID.class, hash(refresh));
 
         mockMvc.perform(patch("/api/v1/admin/users/{userId}/status", target)
@@ -178,8 +178,8 @@ class AccountAdministrationIntegrationTest {
                         .content("{\"email\":\"%s\",\"password\":\"ClaveSegura1\"}".formatted(targetEmail)))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/v1/auth/refresh")
-                        .cookie(new Cookie("cv_refresh", refresh))
-                        .with(csrf().asHeader()))
+                        .cookie(new Cookie("cv_refresh", refresh), new Cookie("XSRF-TOKEN", csrf))
+                        .header("X-CSRF-TOKEN", csrf))
                 .andExpect(status().isUnauthorized());
         assertEquals(1L, jdbc.queryForObject("select count(*) from audit_event where action='USER_DISABLED' and actor_user_id=? and target_id=?", Long.class, admin, target));
     }

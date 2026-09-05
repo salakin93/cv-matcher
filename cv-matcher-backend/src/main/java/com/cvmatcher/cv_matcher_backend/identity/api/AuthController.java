@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -21,21 +22,22 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.*;
 
-import java.security.SecureRandom;
 import java.time.Duration;
-import java.util.Base64;
 import java.util.UUID;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
 
 @RestController
 @RequestMapping("/api/v1/auth")
 @Tag(name = "Identity", description = "Registro, autenticación y seguridad de cuentas")
 public class AuthController {
     private final IdentityService service;
+    private final CsrfTokenRepository csrfTokens;
     private final boolean secureCookies;
     private final long accessTokenExpiresIn;
 
-    public AuthController(IdentityService service, SecurityProperties properties) {
+    public AuthController(IdentityService service, SecurityProperties properties, CsrfTokenRepository csrfTokens) {
         this.service = service;
+        this.csrfTokens = csrfTokens;
         this.secureCookies = properties.secureCookies();
         this.accessTokenExpiresIn = properties.accessTokenMinutes() * 60;
     }
@@ -59,10 +61,10 @@ public class AuthController {
             @ApiResponse(responseCode = "422", description = "Datos de login inválidos", content = @Content(schema = @Schema(implementation = ApiError.class))),
             @ApiResponse(responseCode = "401", description = "Credenciales inválidas", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    public TokenResponse login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
+    public TokenResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest, HttpServletResponse response) {
         var login = service.login(request.email(), request.password());
         refreshCookie(response, login.refreshToken(), Duration.ofHours(8));
-        csrfCookie(response, Duration.ofHours(8));
+        csrfCookie(servletRequest, response, Duration.ofHours(8));
         return tokenResponse(login);
     }
 
@@ -75,10 +77,10 @@ public class AuthController {
             @ApiResponse(responseCode = "401", description = "Sesión inválida", content = @Content(schema = @Schema(implementation = ApiError.class))),
             @ApiResponse(responseCode = "403", description = "CSRF inválido o ausente", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    public TokenResponse refresh(@CookieValue("cv_refresh") String refresh, HttpServletResponse response) {
+    public TokenResponse refresh(@CookieValue("cv_refresh") String refresh, HttpServletRequest request, HttpServletResponse response) {
         var login = service.refresh(refresh);
         refreshCookie(response, login.refreshToken(), Duration.ofHours(8));
-        csrfCookie(response, Duration.ofHours(8));
+        csrfCookie(request, response, Duration.ofHours(8));
         return tokenResponse(login);
     }
 
@@ -91,10 +93,10 @@ public class AuthController {
             @ApiResponse(responseCode = "204", description = "Sesión cerrada"),
             @ApiResponse(responseCode = "403", description = "CSRF inválido o ausente", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    public void logout(@CookieValue(value = "cv_refresh", required = false) String refresh, HttpServletResponse response) {
+    public void logout(@CookieValue(value = "cv_refresh", required = false) String refresh, HttpServletRequest request, HttpServletResponse response) {
         if (refresh != null) service.logout(refresh);
         refreshCookie(response, "", Duration.ZERO);
-        csrfCookie(response, Duration.ZERO);
+        csrfCookie(request, response, Duration.ZERO);
     }
 
     @GetMapping("/me")
@@ -204,8 +206,9 @@ public class AuthController {
         return new TokenResponse(login.accessToken(), "Bearer", accessTokenExpiresIn, login.user(), login.user().forcePasswordChange());
     }
 
-    private void csrfCookie(HttpServletResponse response, Duration maxAge) {
-        cookie(response, "XSRF-TOKEN", maxAge.isZero() ? "" : randomToken(), false, maxAge);
+    private void csrfCookie(HttpServletRequest request, HttpServletResponse response, Duration maxAge) {
+        var value = maxAge.isZero() ? "" : csrfTokens.generateToken(request).getToken();
+        cookie(response, "XSRF-TOKEN", value, false, maxAge);
     }
 
     private void cookie(HttpServletResponse response, String name, String value, boolean httpOnly, Duration maxAge) {
@@ -217,12 +220,6 @@ public class AuthController {
                 .maxAge(maxAge)
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-    }
-
-    private String randomToken() {
-        var bytes = new byte[32];
-        new SecureRandom().nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     record RegisterRequest(
