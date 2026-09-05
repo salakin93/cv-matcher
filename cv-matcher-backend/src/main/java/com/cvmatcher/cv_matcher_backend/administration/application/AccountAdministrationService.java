@@ -1,6 +1,7 @@
 package com.cvmatcher.cv_matcher_backend.administration.application;
 
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
+import com.cvmatcher.cv_matcher_backend.identity.application.SessionRevocationPort;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,10 +25,12 @@ public class AccountAdministrationService {
 
     private final JdbcTemplate jdbc;
     private final MeterRegistry metrics;
+    private final SessionRevocationPort sessions;
 
-    public AccountAdministrationService(JdbcTemplate jdbc, MeterRegistry metrics) {
+    public AccountAdministrationService(JdbcTemplate jdbc, MeterRegistry metrics, SessionRevocationPort sessions) {
         this.jdbc = jdbc;
         this.metrics = metrics;
+        this.sessions = sessions;
     }
 
     @Transactional(readOnly = true)
@@ -76,7 +79,7 @@ public class AccountAdministrationService {
         if (target.role() == Role.ADMIN && target.status() == Status.ACTIVE && desiredRole != Role.ADMIN)
             requireAnotherActiveAdmin();
         jdbc.update("update user_account set role=?,updated_at=? where id=?", desiredRole.name(), Timestamp.from(Instant.now()), targetId);
-        revokeSessions(targetId);
+        sessions.revokeAllSessions(targetId);
         audit(actorId, "USER_ROLE_CHANGED", targetId);
         metrics.counter("identity.admin.role_changes", "outcome", "success").increment();
     }
@@ -93,7 +96,7 @@ public class AccountAdministrationService {
         if (target.status() == Status.ACTIVE && desiredStatus == Status.DISABLED && target.role() == Role.ADMIN)
             requireAnotherActiveAdmin();
         jdbc.update("update user_account set status=?,updated_at=? where id=?", desiredStatus.name(), Timestamp.from(Instant.now()), targetId);
-        revokeSessions(targetId);
+        sessions.revokeAllSessions(targetId);
         audit(actorId, desiredStatus == Status.DISABLED ? "USER_DISABLED" : "USER_ENABLED", targetId);
         metrics.counter("identity.admin.status_changes", "outcome", "success").increment();
     }
@@ -137,10 +140,6 @@ public class AccountAdministrationService {
     private AdministrationException conflict(String code) {
         metrics.counter("identity.admin.conflicts", "code", code).increment();
         return new AdministrationException(HttpStatus.CONFLICT, code);
-    }
-
-    private void revokeSessions(UUID userId) {
-        jdbc.update("update user_session set revoked_at=? where user_id=? and revoked_at is null", Timestamp.from(Instant.now()), userId);
     }
 
     private void audit(UUID actorId, String action, UUID targetId) {

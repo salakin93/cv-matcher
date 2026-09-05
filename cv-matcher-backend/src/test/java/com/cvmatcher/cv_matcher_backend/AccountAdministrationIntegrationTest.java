@@ -4,11 +4,13 @@ import com.cvmatcher.cv_matcher_backend.administration.application.AccountAdmini
 import com.cvmatcher.cv_matcher_backend.administration.application.AdministrationException;
 import com.cvmatcher.cv_matcher_backend.identity.application.JwtService;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
@@ -26,8 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -114,6 +118,12 @@ class AccountAdministrationIntegrationTest {
         mockMvc.perform(patch("/api/v1/admin/users/{userId}/status", pending)
                         .header("Authorization", authorization)
                         .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EMAIL_NOT_VERIFIED"));
+        mockMvc.perform(patch("/api/v1/admin/users/{userId}/status", pending)
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"DISABLED\",\"password\":\"not-allowed\"}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
@@ -136,6 +146,42 @@ class AccountAdministrationIntegrationTest {
         assertEquals(1L, jdbc.queryForObject("select count(*) from user_session where id=? and revoked_at is not null", Long.class, targetSession));
         assertEquals(1L, jdbc.queryForObject("select count(*) from user_session where user_id=?", Long.class, target));
         assertEquals(1L, jdbc.queryForObject("select count(*) from audit_event where action='USER_ENABLED' and actor_user_id=? and target_id=?", Long.class, admin, target));
+    }
+
+    @Test
+    void disablingAnAccountRevokesItsBearerAndPreventsLoginAndRefresh() throws Exception {
+        var admin = insertUser("admin-disable@example.test", "ADMIN", "ACTIVE");
+        var targetEmail = "target-disable@example.test";
+        var target = insertUser(targetEmail, "RECRUITER", "ACTIVE");
+        var adminSession = insertSession(admin, "admin-disable-session");
+        var login = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"%s\",\"password\":\"ClaveSegura1\"}".formatted(targetEmail)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse();
+        var refresh = cookieValue(login.getHeaders(HttpHeaders.SET_COOKIE), "cv_refresh");
+        var targetSession = jdbc.queryForObject("select id from user_session where refresh_token_hash=?", UUID.class, hash(refresh));
+
+        mockMvc.perform(patch("/api/v1/admin/users/{userId}/status", target)
+                        .header("Authorization", bearer(admin, "ADMIN", adminSession))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"DISABLED\"}"))
+                .andExpect(status().isNoContent());
+
+        assertEquals("DISABLED", jdbc.queryForObject("select status from user_account where id=?", String.class, target));
+        assertEquals(1L, jdbc.queryForObject("select count(*) from user_session where id=? and revoked_at is not null", Long.class, targetSession));
+        mockMvc.perform(get("/api/v1/auth/me").header("Authorization", bearer(target, "RECRUITER", targetSession)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"%s\",\"password\":\"ClaveSegura1\"}".formatted(targetEmail)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .cookie(new Cookie("cv_refresh", refresh))
+                        .with(csrf().asHeader()))
+                .andExpect(status().isUnauthorized());
+        assertEquals(1L, jdbc.queryForObject("select count(*) from audit_event where action='USER_DISABLED' and actor_user_id=? and target_id=?", Long.class, admin, target));
     }
 
     @Test
@@ -235,28 +281,34 @@ class AccountAdministrationIntegrationTest {
     void preservesAnActiveAdministratorWhenConcurrentMutationsRace() throws Exception {
         var firstAdmin = insertUser("first-admin-race@example.test", "ADMIN", "ACTIVE");
         var secondAdmin = insertUser("second-admin-race@example.test", "ADMIN", "ACTIVE");
-        var otherActiveAdmins = jdbc.queryForObject(
-                "select count(*) from user_account where id not in (?,?) and role='ADMIN' and status='ACTIVE'",
-                Long.class,
+        var otherActiveAdmins = jdbc.query(
+                "select id from user_account where id not in (?,?) and role='ADMIN' and status='ACTIVE'",
+                (rs, rowNum) -> UUID.fromString(rs.getString("id")),
                 firstAdmin,
                 secondAdmin
         );
+        otherActiveAdmins.forEach(id -> jdbc.update("update user_account set status='DISABLED' where id=?", id));
         var ready = new CountDownLatch(2);
         var start = new CountDownLatch(1);
-        Callable<Boolean> disableSecond = disable(firstAdmin, secondAdmin, ready, start);
-        Callable<Boolean> disableFirst = disable(secondAdmin, firstAdmin, ready, start);
+        Callable<AdministrationResult> disableSecond = disable(firstAdmin, secondAdmin, ready, start);
+        Callable<AdministrationResult> disableFirst = disable(secondAdmin, firstAdmin, ready, start);
 
-        try (var executor = Executors.newFixedThreadPool(2)) {
-            var first = executor.submit(disableSecond);
-            var second = executor.submit(disableFirst);
-            assertTrue(ready.await(5, java.util.concurrent.TimeUnit.SECONDS));
-            start.countDown();
-            assertEquals(otherActiveAdmins == 0 ? 1L : 2L,
-                    java.util.stream.Stream.of(first.get(), second.get()).filter(Boolean::booleanValue).count());
+        try {
+            try (var executor = Executors.newFixedThreadPool(2)) {
+                var first = executor.submit(disableSecond);
+                var second = executor.submit(disableFirst);
+                assertTrue(ready.await(5, java.util.concurrent.TimeUnit.SECONDS));
+                start.countDown();
+                var results = java.util.List.of(first.get(), second.get());
+                assertEquals(1L, results.stream().filter(AdministrationResult::successful).count());
+                assertEquals(1L, results.stream().filter(result -> "LAST_ACTIVE_ADMIN".equals(result.conflictCode())).count());
+            }
+
+            assertEquals(1L,
+                    jdbc.queryForObject("select count(*) from user_account where id in (?,?) and role='ADMIN' and status='ACTIVE'", Long.class, firstAdmin, secondAdmin));
+        } finally {
+            otherActiveAdmins.forEach(id -> jdbc.update("update user_account set status='ACTIVE' where id=?", id));
         }
-
-        assertEquals(otherActiveAdmins == 0 ? 1L : 0L,
-                jdbc.queryForObject("select count(*) from user_account where id in (?,?) and role='ADMIN' and status='ACTIVE'", Long.class, firstAdmin, secondAdmin));
     }
 
     private UUID insertUser(String email, String role, String status) {
@@ -285,7 +337,7 @@ class AccountAdministrationIntegrationTest {
                 "insert into user_session(id,user_id,refresh_token_hash,expires_at,created_at) values(?,?,?,?,?)",
                 id,
                 userId,
-                java.util.Base64.getEncoder().encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest(rawToken.getBytes(java.nio.charset.StandardCharsets.UTF_8))),
+                hash(rawToken),
                 Timestamp.from(Instant.now().plusSeconds(300)),
                 Timestamp.from(Instant.now())
         );
@@ -296,21 +348,38 @@ class AccountAdministrationIntegrationTest {
         return "Bearer " + jwt.issue(userId, role, sessionId);
     }
 
+    private String hash(String value) throws Exception {
+        return java.util.Base64.getEncoder().encodeToString(
+                java.security.MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        );
+    }
+
+    private String cookieValue(java.util.List<String> cookies, String name) {
+        return cookies.stream()
+                .filter(value -> value.startsWith(name + "="))
+                .findFirst()
+                .map(value -> value.substring(name.length() + 1, value.indexOf(';')))
+                .orElseThrow();
+    }
+
     private double metricCount(String name, String tag, String value) {
         var counter = metrics.find(name).tag(tag, value).counter();
         return counter == null ? 0 : counter.count();
     }
 
-    private Callable<Boolean> disable(UUID actorId, UUID targetId, CountDownLatch ready, CountDownLatch start) {
+    private Callable<AdministrationResult> disable(UUID actorId, UUID targetId, CountDownLatch ready, CountDownLatch start) {
         return () -> {
             ready.countDown();
             start.await();
             try {
                 administration.changeStatus(actorId, targetId, AccountAdministrationService.Status.DISABLED);
-                return true;
+                return new AdministrationResult(true, null);
             } catch (AdministrationException exception) {
-                return false;
+                return new AdministrationResult(false, exception.code());
             }
         };
+    }
+
+    private record AdministrationResult(boolean successful, String conflictCode) {
     }
 }

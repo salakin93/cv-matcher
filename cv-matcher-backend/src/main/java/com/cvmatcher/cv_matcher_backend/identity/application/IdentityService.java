@@ -21,7 +21,7 @@ import java.util.Base64;
 import java.util.UUID;
 
 @Service
-public class IdentityService {
+public class IdentityService implements SessionRevocationPort {
     private static final Logger log = LoggerFactory.getLogger(IdentityService.class);
     private final JdbcTemplate jdbc;
     private final MailGateway mail;
@@ -36,6 +36,12 @@ public class IdentityService {
         this.props = props;
         this.jwt = jwt;
         this.metrics = metrics;
+    }
+
+    @Override
+    @Transactional
+    public void revokeAllSessions(UUID userId) {
+        revokeAll(userId);
     }
 
     @Transactional
