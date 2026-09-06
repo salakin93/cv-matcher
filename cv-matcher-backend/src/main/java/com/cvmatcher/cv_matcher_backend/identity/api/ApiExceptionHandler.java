@@ -3,6 +3,7 @@ package com.cvmatcher.cv_matcher_backend.identity.api;
 import com.cvmatcher.cv_matcher_backend.administration.application.AdministrationException;
 import com.cvmatcher.cv_matcher_backend.identity.application.PasswordPolicyException;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
+import com.cvmatcher.cv_matcher_backend.vacancy.application.VacancyException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DuplicateKeyException;
@@ -53,6 +54,11 @@ class ApiExceptionHandler {
 
     @ExceptionHandler(AdministrationException.class)
     ResponseEntity<ApiError> handleAdministration(AdministrationException exception, HttpServletRequest request) {
+        return error(exception.status(), exception.code(), "La operación no puede completarse.", request);
+    }
+
+    @ExceptionHandler(VacancyException.class)
+    ResponseEntity<ApiError> handleVacancy(VacancyException exception, HttpServletRequest request) {
         return error(exception.status(), exception.code(), "La operación no puede completarse.", request);
     }
 

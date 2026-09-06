@@ -65,7 +65,8 @@ public class SecurityConfiguration {
                         "/v3/api-docs/**",
                         "/swagger-ui.html",
                         "/swagger-ui/**"
-                ).permitAll().requestMatchers("/api/v1/admin/**").hasRole("ADMIN").anyRequest().authenticated())
+                ).permitAll().requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/vacancies/**").hasAnyRole("RECRUITER", "ADMIN").anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, exception) ->
                                 write(mapper, request, response, 401, "UNAUTHENTICATED", "No autenticado"))
