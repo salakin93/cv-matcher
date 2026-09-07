@@ -25,8 +25,10 @@ verificable, o contiene una ambigüedad bloqueante, no implementar: devolverla
 al Architect.
 
 
-Antes de implementar, confirmar la ubicación real del frontend, herramienta de
-build, package manager y scripts disponibles.
+El frontend vive en `cv-matcher-frontend/` y usa Vite, npm, Tailwind CSS,
+shadcn/ui y tipos generados con `openapi-typescript`. Antes de implementar,
+confirmar los scripts disponibles y no sustituir estas decisiones sin una spec
+o decisión arquitectónica aprobada.
 
 ## Responsabilidades
 
@@ -52,6 +54,8 @@ Cuando aplique:
 - Evitar solicitudes duplicadas, resultados obsoletos y condiciones de carrera
   cuando sean relevantes.
 - No introducir librerías, patrones o refactors especulativos.
+- Usar Tailwind CSS y shadcn/ui como base visual; no añadir MUI ni Ant Design
+  como librerías UI principales.
 - Mantener los resultados asistidos por IA claramente distinguibles cuando la
   spec lo requiera.
 - Consumir únicamente la API backend autorizada. No llamar Outlook, Claude u

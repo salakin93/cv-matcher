@@ -2,7 +2,10 @@
 
 ## Principios
 
-- React/TypeScript y cliente API tipado desde OpenAPI aprobada.
+- React 19, TypeScript estricto, Vite y npm en `cv-matcher-frontend/`; cliente
+  API tipado desde OpenAPI aprobada con `openapi-typescript`.
+- Tailwind CSS y shadcn/ui son la base de estilos y componentes accesibles. No
+  se usan MUI ni Ant Design como librerías UI principales.
 - Sesión en memoria; refresh sólo con cookie segura backend; nunca JWT en localStorage.
 - UI española, accesible, responsive, con loading/empty/warning/retry/error.
 - `401` vuelve a login; `403` muestra acceso denegado; correlation ID sin detalle sensible.

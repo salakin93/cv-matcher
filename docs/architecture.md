@@ -38,7 +38,7 @@ En despliegue, un proxy inverso termina TLS y publica sólo frontend/API. Postgr
 | Área | Decisión |
 | --- | --- |
 | Backend | Java 25, Spring Boot 3.5.x, Gradle 8.4+ y Spring MVC. La versión patch se actualiza antes de cada incremento. |
-| Frontend | React 19, TypeScript estricto y Vite. Diseño responsivo: escritorio prioritario, móvil funcional. |
+| Frontend | React 19, TypeScript estricto, Vite y npm en `cv-matcher-frontend/`. Tailwind CSS y shadcn/ui son la base de estilos y componentes accesibles; no se usan MUI ni Ant Design como librerías UI principales. Los tipos se generan con `openapi-typescript` desde OpenAPI backend; diseño responsivo: escritorio prioritario, móvil funcional. |
 | Base de datos | PostgreSQL 17. JPA/Hibernate sólo detrás de módulos de aplicación; Flyway es la única vía de cambios de esquema. |
 | API | REST JSON bajo `/api/v1`, OpenAPI generado desde backend. |
 | Documentos | Sistema de archivos privado montado en el backend, cifrado AES-256-GCM por archivo. |

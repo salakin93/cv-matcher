@@ -2,12 +2,15 @@
 
 ## Reglas comunes
 
-React y TypeScript; contratos generados desde OpenAPI; rutas protegidas; sesión
-en memoria y refresh mediante cookie segura. Nunca guardar JWT, tokens, secretos,
-CVs, rutas, hashes o PII no devuelta por API en `localStorage`, URLs, telemetry
-o logs de cliente. Todas las fases incluyen estados loading/empty/warning/retry,
-accesibilidad de teclado/lector de pantalla y manejo uniforme de `401`, `403`,
-`409`, `422` y correlation ID.
+React 19, TypeScript estricto, Vite y npm en `cv-matcher-frontend/`; contratos
+generados desde OpenAPI con `openapi-typescript`. Tailwind CSS y shadcn/ui son
+la base de estilos y componentes accesibles; MUI y Ant Design no se usan como
+librerías UI principales. Rutas protegidas; sesión en memoria y refresh mediante
+cookie segura. Nunca guardar JWT, tokens, secretos, CVs, rutas, hashes o PII no
+devuelta por API en `localStorage`, URLs, telemetry o logs de cliente. Todas las
+fases incluyen estados loading/empty/warning/retry, accesibilidad de
+teclado/lector de pantalla y manejo uniforme de `401`, `403`, `409`, `422` y
+correlation ID.
 
 ## FE-001 — Fundación y autenticación
 

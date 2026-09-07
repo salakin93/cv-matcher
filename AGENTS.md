@@ -32,5 +32,7 @@ an increment:
 ## Repository layout
 
 - `cv-matcher-backend/`: Spring Boot backend.
+- `cv-matcher-frontend/`: React frontend, created in FE-001 with Vite, npm,
+  Tailwind CSS and shadcn/ui.
 - `.agents/`: specifications, roles, product context, and delivery workflow.
 - `docs/`: product, architecture, and frontend planning documents.
