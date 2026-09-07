@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-public class VacancyService {
+public class VacancyService implements VacancySnapshotPort {
     private static final Logger log = LoggerFactory.getLogger(VacancyService.class);
     private final JdbcTemplate jdbc;
     private final MeterRegistry metrics;
@@ -59,6 +59,24 @@ public class VacancyService {
     @Transactional(readOnly = true)
     public VacancyDetail get(UUID vacancyId) {
         return detail(vacancyId);
+    }
+
+    @Override
+    @Transactional
+    public VacancySnapshot snapshotActive(UUID vacancyId) {
+        var current = locked(vacancyId);
+        requireActive(current);
+        var row = jdbc.query("select title,received_from_utc,received_to_utc_exclusive from vacancy where id=?", rs -> rs.next()
+                ? new Object[]{rs.getString("title"), rs.getTimestamp("received_from_utc").toInstant(), rs.getTimestamp("received_to_utc_exclusive").toInstant()} : null, vacancyId);
+        var requirements = jdbc.query("select description,weight,mandatory,position from vacancy_requirement where vacancy_id=? order by position asc",
+                (rs, ignored) -> new VacancySnapshotPort.RequirementSnapshot(rs.getString("description"), rs.getInt("weight"), rs.getBoolean("mandatory"), rs.getInt("position")), vacancyId);
+        return new VacancySnapshotPort.VacancySnapshot(vacancyId, current.version(), (String) row[0], (Instant) row[1], (Instant) row[2], requirements);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean exists(UUID vacancyId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from vacancy where id=?)", Boolean.class, vacancyId));
     }
 
     @Transactional

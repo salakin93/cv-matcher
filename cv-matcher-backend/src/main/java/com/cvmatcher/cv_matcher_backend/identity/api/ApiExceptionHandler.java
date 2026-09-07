@@ -3,6 +3,7 @@ package com.cvmatcher.cv_matcher_backend.identity.api;
 import com.cvmatcher.cv_matcher_backend.administration.application.AdministrationException;
 import com.cvmatcher.cv_matcher_backend.identity.application.PasswordPolicyException;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
+import com.cvmatcher.cv_matcher_backend.job.application.JobException;
 import com.cvmatcher.cv_matcher_backend.vacancy.application.VacancyException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -10,6 +11,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -21,6 +23,11 @@ import java.util.UUID;
 
 @RestControllerAdvice
 class ApiExceptionHandler {
+    private final MeterRegistry metrics;
+
+    ApiExceptionHandler(MeterRegistry metrics) {
+        this.metrics = metrics;
+    }
 
     @ExceptionHandler(PasswordPolicyException.class)
     ResponseEntity<ApiError> handlePasswordPolicy(HttpServletRequest request) {
@@ -44,11 +51,13 @@ class ApiExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiError> handleRequestValidation(HttpServletRequest request) {
+        jobValidationMetric(request);
         return error(HttpStatus.UNPROCESSABLE_ENTITY, "VALIDATION_ERROR", "Revise los datos enviados.", request);
     }
 
     @ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class, ConstraintViolationException.class, HandlerMethodValidationException.class})
     ResponseEntity<ApiError> handleMalformedRequest(HttpServletRequest request) {
+        jobValidationMetric(request);
         return error(HttpStatus.UNPROCESSABLE_ENTITY, "VALIDATION_ERROR", "Revise los datos enviados.", request);
     }
 
@@ -60,6 +69,12 @@ class ApiExceptionHandler {
     @ExceptionHandler(VacancyException.class)
     ResponseEntity<ApiError> handleVacancy(VacancyException exception, HttpServletRequest request) {
         return error(exception.status(), exception.code(), "La operación no puede completarse.", request);
+    }
+
+    @ExceptionHandler(JobException.class)
+    ResponseEntity<ApiError> handleJob(JobException exception, HttpServletRequest request) {
+        if (exception.status() == HttpStatus.UNPROCESSABLE_ENTITY) jobValidationMetric(request);
+        return error(exception.status(), exception.code(), "La operaciÃ³n no puede completarse.", request);
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -85,6 +100,16 @@ class ApiExceptionHandler {
     private UUID correlationId(HttpServletRequest request) {
         var value = request.getAttribute(CorrelationIdFilter.ATTRIBUTE);
         return value instanceof UUID correlationId ? correlationId : null;
+    }
+
+    private void jobValidationMetric(HttpServletRequest request) {
+        if (!"POST".equals(request.getMethod())) return;
+        var path = request.getRequestURI();
+        String action = null;
+        if (path.startsWith("/api/v1/vacancies/") && path.endsWith("/report-jobs")) action = "enqueue";
+        if (path.startsWith("/api/v1/report-jobs/") && path.endsWith("/cancel")) action = "cancel";
+        if (path.startsWith("/api/v1/report-jobs/") && path.endsWith("/retry")) action = "retry";
+        if (action != null) metrics.counter("matching_jobs.mutations", "action", action, "outcome", "validation_error").increment();
     }
 
 }
