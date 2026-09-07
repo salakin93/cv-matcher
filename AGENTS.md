@@ -34,4 +34,3 @@ an increment:
 - `cv-matcher-backend/`: Spring Boot backend.
 - `.agents/`: specifications, roles, product context, and delivery workflow.
 - `docs/`: product, architecture, and frontend planning documents.
-
