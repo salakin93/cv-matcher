@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Segoe UI", sans-serif;
+  --color-ink: #102a43;
+  --color-mist: #f4f7fb;
+  --color-brand: #16697a;
+  --color-brand-dark: #0f4c5c;
+}
+
+@layer base {
+  * { @apply border-slate-200; }
+  body { @apply min-h-screen bg-mist text-ink antialiased; }
+  button, input { font: inherit; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-brand; }
+}
