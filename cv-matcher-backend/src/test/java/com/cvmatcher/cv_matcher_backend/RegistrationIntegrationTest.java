@@ -458,8 +458,8 @@ class RegistrationIntegrationTest {
         var cookies = login.getHeaders(HttpHeaders.SET_COOKIE);
         var refresh = cookieValue(cookies, "cv_refresh");
         var csrf = cookieValue(cookies, "XSRF-TOKEN");
-        assertTrue(cookies.stream().anyMatch(value -> value.startsWith("cv_refresh=") && value.contains("HttpOnly") && value.contains("SameSite=Lax")));
-        assertTrue(cookies.stream().anyMatch(value -> value.startsWith("XSRF-TOKEN=") && value.contains("SameSite=Lax") && !value.contains("HttpOnly")));
+        assertTrue(cookies.stream().anyMatch(value -> value.startsWith("cv_refresh=") && value.contains("HttpOnly") && value.contains("SameSite=Lax") && value.contains("Path=/api/v1/auth")));
+        assertTrue(cookies.stream().anyMatch(value -> value.startsWith("XSRF-TOKEN=") && value.contains("SameSite=Lax") && !value.contains("HttpOnly") && value.contains("Path=/")));
         assertFalse(cookies.stream().anyMatch(value -> value.contains("Secure")));
 
         mockMvc.perform(post("/api/v1/auth/refresh")

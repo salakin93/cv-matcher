@@ -208,15 +208,19 @@ public class AuthController {
 
     private void csrfCookie(HttpServletRequest request, HttpServletResponse response, Duration maxAge) {
         var value = maxAge.isZero() ? "" : csrfTokens.generateToken(request).getToken();
-        cookie(response, "XSRF-TOKEN", value, false, maxAge);
+        cookie(response, "XSRF-TOKEN", value, false, maxAge, "/");
     }
 
     private void cookie(HttpServletResponse response, String name, String value, boolean httpOnly, Duration maxAge) {
+        cookie(response, name, value, httpOnly, maxAge, "/api/v1/auth");
+    }
+
+    private void cookie(HttpServletResponse response, String name, String value, boolean httpOnly, Duration maxAge, String path) {
         var cookie = ResponseCookie.from(name, value)
                 .httpOnly(httpOnly)
                 .secure(secureCookies)
                 .sameSite("Lax")
-                .path("/api/v1/auth")
+                .path(path)
                 .maxAge(maxAge)
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());

@@ -33,7 +33,7 @@ public class SecurityConfiguration {
     CookieCsrfTokenRepository csrfTokenRepository(SecurityProperties properties) {
         var repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         repository.setHeaderName("X-CSRF-TOKEN");
-        repository.setCookiePath("/api/v1/auth");
+        repository.setCookiePath("/");
         repository.setCookieCustomizer(cookie -> cookie
                 .sameSite("Lax")
                 .secure(properties.secureCookies()));
