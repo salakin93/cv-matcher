@@ -67,7 +67,7 @@ Componentes de requisitos/fechas/conflicto, contrato OpenAPI 003 y E2E de CRUD, 
 
 | Tipo | Detalle | Tratamiento |
 | --- | --- | --- |
-| BLOCKER | Contrato OpenAPI de 003 aún no está validado para frontend. | No implementar cliente ni rutas hasta aprobarlo. |
+| Dependencia satisfecha | Contrato OpenAPI de backend 003 generado y validado para frontend. FE-001 y backend 003 están disponibles. | Consumir exclusivamente los tipos generados y mantener los controles de sesión de FE-001. |
 
 ## Decisiones / preguntas abiertas
 
@@ -75,6 +75,6 @@ Componentes de requisitos/fechas/conflicto, contrato OpenAPI 003 y E2E de CRUD, 
 
 ## Definition of Ready
 
-`BLOCKED`
+`READY_FOR_DEV`
 
-Requiere OpenAPI 003 aprobado y disponible.
+OpenAPI 003 aprobado y disponible en `cv-matcher-frontend/src/api/generated.ts`; FE-001 y backend 003 satisfacen las dependencias del incremento.
