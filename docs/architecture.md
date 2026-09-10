@@ -131,7 +131,7 @@ Estados mínimos: `QUEUED`, `DISCOVERING`, `INGESTING_DOCUMENTS`, `ANALYZING`, `
 
 - Una sola conexión Outlook compartida, administrada por `ADMIN`.
 - OAuth 2.0 Authorization Code + PKCE en backend confidencial, con callback backend, `offline_access`, y refresh token cifrado en DB. El refresh token rotado se reemplaza atómicamente y nunca llega al navegador.
-- Permiso delegado mínimo `Mail.Read`; no se solicitan asunto, cuerpo, remitente ni propiedades ajenas al propósito salvo que una spec aprobada lo justifique. Graph permite listar mensajes de una carpeta con permisos `Mail.ReadBasic` o mayores; la descarga de adjuntos requiere validar el permiso mínimo exacto en la spec de integración. [Microsoft Graph: listar mensajes](https://learn.microsoft.com/en-us/graph/api/mailfolder-list-messages?view=graph-rest-1.0)
+- La conexión OAuth inicial solicita sólo `openid`, `profile` y `offline_access`; valida el `id_token` mediante OIDC discovery/JWKS sin llamar Microsoft Graph. El permiso de Inbox no se solicita hasta una spec aprobada de descubrimiento; esa spec debe justificar y validar el permiso mínimo exacto antes de listar mensajes. [Microsoft Graph: listar mensajes](https://learn.microsoft.com/en-us/graph/api/mailfolder-list-messages?view=graph-rest-1.0)
 - Se consulta sólo Inbox, por rango UTC inclusivo, paginado, con campos mínimos y el header `Prefer: IdType="ImmutableId"` en cada petición relevante. Microsoft exige el header en cada solicitud para usar IDs inmutables de forma consistente. [IDs inmutables de Outlook](https://learn.microsoft.com/en-us/graph/outlook-immutable-id)
 - Timeouts explícitos, máximo tres reintentos para errores transitorios, respeto de `429 Retry-After`, límites de mensajes, adjuntos y bytes definidos por spec.
 - La expiración, revocación o falta de consentimiento exige reconexión por administrador. Los refresh tokens deben protegerse y el anterior debe descartarse al obtener uno nuevo. [Refresh tokens de Microsoft](https://learn.microsoft.com/en-us/entra/identity-platform/refresh-tokens)
@@ -178,7 +178,7 @@ Perfiles permitidos: `local`, `test`, `prod`. La configuración usa `application
 | Base de datos | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` |
 | Seguridad | `JWT_SIGNING_KEY`, `APP_BASE_URL`, `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD` |
 | Documentos | `CV_STORAGE_ROOT`, `CV_DOCUMENT_ENCRYPTION_KEY`, límites de tamaño |
-| Microsoft | `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT_ID`, `MICROSOFT_REDIRECT_URI` |
+| Microsoft | `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT_ID`, `MICROSOFT_REDIRECT_URI`, `MICROSOFT_TOKEN_ENCRYPTION_KEY`, `MICROSOFT_TOKEN_ENCRYPTION_KEY_VERSION` |
 | Claude | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` |
 | Correo | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `MAIL_FROM` |
 

@@ -74,6 +74,29 @@ Cuando aplique:
 - No modificar el PRD, la arquitectura o una spec para resolver una ambigüedad;
   escalarla al Architect.
 
+## Reglas anti-duplicación y configuración (SSOT)
+
+- Antes de escribir un valor literal (URL, puerto, timeout, mensaje, ruta,
+  nombre de header, etc.), verificar si ya existe una constante, config o
+  módulo que lo represente. Si no existe y el valor se usa o podría usarse en
+  más de un lugar, crearlo en el punto central correspondiente antes de usarlo.
+- Antes de implementar, buscar en el código existente usos previos del mismo
+  concepto (grep/búsqueda semántica) para reusar la abstracción existente en
+  vez de crear una nueva o repetir el valor.
+- Toda comunicación con el backend debe pasar por el cliente HTTP centralizado
+  del proyecto (ej. `src/api/client.ts`). Prohibido usar `fetch`/`axios`
+  directo con URLs hardcodeadas en componentes, hooks o servicios.
+- Variables de entorno (`VITE_*`) son la única fuente de configuración de
+  entorno; nunca hardcodear host/puerto/flags en el código fuente.
+- Strings repetidos de UI (mensajes de error, labels, rutas) que aparezcan en
+  más de un componente deben centralizarse (constantes, i18n, o módulo de
+  rutas), no copiarse.
+- No redefinir a mano tipos que ya existen en los tipos generados por
+  `openapi-typescript`; importarlos desde ahí.
+- Antes del handoff, verificar explícitamente: ¿algún valor literal nuevo
+  introducido en este cambio se repite en más de un archivo? Si sí, extraerlo
+  a una constante/config antes de entregar.
+
 ## Verificación
 
 Usar los scripts reales definidos por el proyecto para ejecutar, cuando

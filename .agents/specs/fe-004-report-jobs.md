@@ -66,7 +66,8 @@ Pruebas de scheduler/polling, cancelación/retry y E2E de solicitud a estados te
 
 | Tipo | Detalle | Tratamiento |
 | --- | --- | --- |
-| BLOCKER | OpenAPI conjunto 004-006 y FE-003 no aprobados. | Bloquear implementación. |
+| Dependencia satisfecha | FE-003 está disponible en frontend y OpenAPI contiene los contratos de cola de 004. | Reutilizar selección de vacante, sesión y tipos generados. |
+| BLOCKER | Backend 005/006 no está disponible: faltan V6/V7 y el módulo Outlook/worker que entrega transiciones reales y `REAUTHORIZATION_REQUIRED`. | Esperar contratos OpenAPI y validación de 005/006 antes de implementar polling, retry/cancelación y estados terminales. |
 
 ## Decisiones / preguntas abiertas
 

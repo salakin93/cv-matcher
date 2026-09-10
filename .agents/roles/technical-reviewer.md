@@ -35,6 +35,10 @@ perteneciente a una spec futura o excluida no es un hallazgo técnico.
 - cohesión, acoplamiento y separación de responsabilidades;
 - complejidad y duplicación significativa;
 - SOLID, DRY y KISS de forma pragmática;
+- valores de configuración (host, puerto, URLs, timeouts) y constantes de
+  negocio (roles, códigos de error, límites) repetidos como literales en
+  lugar de vivir en un único punto (config centralizada, enum, constantes
+  compartidas, cliente HTTP único);
 - legibilidad y mantenibilidad;
 - manejo de errores;
 - persistencia, queries y transacciones;
@@ -59,6 +63,28 @@ perteneciente a una spec futura o excluida no es un hallazgo técnico.
 
 Para frontend revisar además componentes, hooks, estado, tipado y acceso a API
 cuando correspondan.
+
+## Checklist anti-duplicación (SSOT)
+
+Verificar explícitamente y dejar constancia en Hallazgos si aplica:
+
+- [ ] ¿Existen valores literales (URL, puerto, timeout, header, string de
+      negocio) repetidos en 2 o más archivos?
+- [ ] En backend: ¿la configuración externa vive en
+      `application.yml`/`@ConfigurationProperties`, o está hardcodeada en
+      múltiples clases?
+- [ ] En backend: ¿los clientes de integraciones externas se instancian una
+      sola vez (bean centralizado) o se repiten por archivo?
+- [ ] En frontend: ¿todas las llamadas a la API pasan por el cliente HTTP
+      centralizado del proyecto, o hay `fetch`/`axios` directos con URLs
+      hardcodeadas?
+- [ ] ¿Se redefinieron a mano tipos que ya existen en los tipos generados por
+      `openapi-typescript`?
+
+Un hallazgo de este tipo se clasifica como severidad mínima `MAYOR` cuando el
+valor duplicado aparece en 3 o más lugares o afecta configuración de entorno
+(host/puerto/credenciales), ya que bloquea despliegues futuros y aumenta el
+riesgo de inconsistencia entre entornos.
 
 No bloquear por preferencias estilísticas, micro-optimizaciones o
 sobreingeniería hipotética.

@@ -56,6 +56,30 @@ Cuando aplique:
 - No modificar el PRD, la arquitectura o una spec para resolver una ambigüedad
   de implementación.
 
+## Reglas anti-duplicación y configuración (SSOT)
+
+- Antes de escribir un valor literal (URL, puerto, timeout, código de error,
+  rol, límite de paginación, nombre de header, etc.), verificar si ya existe
+  una constante, config o tipo que lo represente. Si no existe y el valor se
+  usa o podría usarse en más de un lugar, crearlo en el punto central
+  correspondiente antes de usarlo.
+- Antes de implementar, buscar en el código existente usos previos del mismo
+  concepto (grep/búsqueda semántica) para reusar la abstracción existente en
+  vez de crear una nueva o repetir el valor.
+- Toda configuración externa (URLs, credenciales, timeouts, flags de
+  features) debe vivir en `application.yml`/`application.properties` y
+  exponerse vía `@ConfigurationProperties`, nunca hardcodeada ni repetida
+  entre clases.
+- Los clientes de integraciones externas (WebClient/RestTemplate/Feign) deben
+  construirse una sola vez, en un bean centralizado, con base URL, timeout y
+  headers definidos en un solo punto.
+- Constantes de negocio (códigos de error, roles, estados de enum) deben
+  vivir en un único lugar (enum o clase de constantes), nunca como strings
+  mágicos repetidos.
+- Antes del handoff, verificar explícitamente: ¿algún valor literal nuevo
+  introducido en este cambio se repite en más de un archivo? Si sí, extraerlo
+  a una constante/config antes de entregar.
+
 Escalar al Architect cualquier decisión fuera de la spec, ambigüedad funcional
 o cambio estructural que afecte a más de un incremento.
 

@@ -55,12 +55,16 @@ incremento no lee mensajes, adjuntos ni documentos.
    únicamente la URL de autorización; `state`, `code_verifier` y código no se
    entregan a la SPA ni se escriben en logs.
 4. El refresh token se cifra con AES-GCM usando una clave de 256 bits obtenida
-   exclusivamente de `MICROSOFT_TOKEN_ENCRYPTION_KEY`. La clave nunca se guarda
-   en BD, se devuelve por API ni aparece en configuración de prueba real.
+   exclusivamente de `MICROSOFT_TOKEN_ENCRYPTION_KEY`. Su versión proviene de
+   `MICROSOFT_TOKEN_ENCRYPTION_KEY_VERSION`, entero positivo obligatorio en
+   `prod` y valor ficticio `1` en `test`. La clave nunca se guarda en BD, se
+   devuelve por API ni aparece en configuración de prueba real.
 5. La conexión no autoriza lectura por sí misma. Los módulos futuros deberán
    declarar explícitamente el mínimo permiso Graph y rango Inbox; este incremento
-   solicita sólo `openid`, `profile`, `offline_access` y `User.Read` para validar
-   la identidad de la cuenta conectada.
+   solicita sólo `openid`, `profile` y `offline_access`. El backend valida el
+   `id_token` mediante OIDC discovery/JWKS de Entra (firma, `issuer`, audiencia,
+   expiración, tenant y `nonce`) y persiste exclusivamente el claim `sub` como
+   `account_subject`; no llama a Microsoft Graph.
 
 ## Modelo y persistencia
 
@@ -78,14 +82,19 @@ Tabla singleton con PK constante `id = 1`.
 | `account_subject` | `sub`/identidad técnica del token, no correo; nullable. |
 | `granted_scopes` | Lista normalizada de scopes otorgados, sin tokens. |
 | `refresh_token_ciphertext` | Bytes AES-GCM; nullable fuera de `CONNECTED`. |
-| `refresh_token_key_version` | Entero no nulo para rotación futura de clave. |
+| `refresh_token_key_version` | Entero positivo no nulo, tomado de `MICROSOFT_TOKEN_ENCRYPTION_KEY_VERSION` al cifrar. |
 | `connected_at`, `last_token_refresh_at`, `updated_at` | `timestamptz` UTC. |
 | `last_error_code` | Código seguro, máximo 80; nunca mensaje Graph. |
 | `version` | `bigint` para actualización optimista interna. |
 
 La tabla tiene constraints de coherencia: `CONNECTED` exige ciphertext,
 `REAUTHORIZATION_REQUIRED` no puede exponer credenciales y `version` inicia en
-0. El ciphertext incluye nonce y tag; no se persiste refresh token en claro.
+0. El ciphertext incluye nonce y tag; no se persiste refresh token en claro. La
+migración inserta la única fila `id=1` con `NOT_CONNECTED` mediante operación
+idempotente. `granted_scopes` se guarda como `text[]` no nulo, sin vacíos,
+deduplicado y ordenado canónicamente. `ERROR` representa un fallo técnico o
+criptográfico sin credencial utilizable; conserva ciphertext para recuperación
+operativa y sólo expone un código seguro.
 
 ### `outlook_authorization_attempt`
 
@@ -111,7 +120,7 @@ Las rutas administrativas requieren JWT válido, sesión persistida y rol efecti
 | --- | --- | --- |
 | `GET /api/v1/admin/integrations/outlook` | — | `200 OutlookConnectionStatus`. |
 | `POST /api/v1/admin/integrations/outlook/authorization` | `{}` | `200 AuthorizationStart`. |
-| `GET /api/v1/admin/integrations/outlook/callback` | `code`, `state`, `error?` | redirección segura a `APP_BASE_URL` o error JSON seguro para llamada no navegador. |
+| `GET /api/v1/admin/integrations/outlook/callback` | `code`, `state`, `error?` | `302` a `${APP_BASE_URL}/admin/integrations/outlook/callback` con sólo `result=connected`, `result=denied` o `result=error`; state inválido, vencido o consumido responde JSON seguro `400`. |
 
 `AuthorizationStart` devuelve sólo `authorizationUrl` HTTPS, `expiresAt` y un
 estado público `PENDING_AUTHORIZATION`. No devuelve state separado, verifier,
@@ -131,6 +140,8 @@ tenant ID, tokens, datos de usuarios o configuración de cliente.
    authority configurado con redirect URI exacta, PKCE `S256` y scopes mínimos.
 3. Callback requiere state existente, vigente y no consumido. Un state inválido,
    vencido o repetido falla con `400 OAUTH_STATE_INVALID` sin revelar si existió.
+   Los demás resultados redirigen con `302` a la ruta fija configurada, usando
+   sólo el parámetro permitido `result=connected|denied|error`.
 4. Antes de intercambiar código, el callback marca el intento consumido dentro
    de la transacción. Un código nunca se reintenta ni se registra.
 5. Intercambio exitoso valida issuer/tenant configurado, expiración y scopes.
@@ -140,6 +151,10 @@ tenant ID, tokens, datos de usuarios o configuración de cliente.
 6. El puerto interno refresca sólo cuando el access token no reutilizable está
    ausente o próximo a vencer. Mantiene el access token exclusivamente en memoria
    de proceso y reemplaza atómicamente el refresh token cuando Microsoft rota.
+   Si `refresh_token_key_version` no coincide con la versión configurada, la
+   clave no está disponible o AES-GCM falla autenticación/descifrado, no llama a
+   Microsoft: pasa la conexión a `ERROR`, conserva ciphertext y persiste sólo
+   `last_error_code=TOKEN_DECRYPTION_FAILED`.
 7. `invalid_grant`, revocación o consentimiento retirado cambia la conexión a
    `REAUTHORIZATION_REQUIRED`, elimina ciphertext y devuelve un error interno
    tipado para que el worker futuro no reintente automáticamente.
@@ -162,6 +177,7 @@ state, token, tenant, subject o respuesta Microsoft.
 | Usuario cancela o Microsoft rechaza autorización | `400 OUTLOOK_AUTHORIZATION_DENIED` |
 | Intercambio/identidad/scopes inválidos | `502 OUTLOOK_AUTHORIZATION_FAILED` |
 | Error transitorio de Microsoft agotado | `503 OUTLOOK_TEMPORARILY_UNAVAILABLE` |
+| Versión de clave o descifrado AES-GCM inválido | Estado `ERROR`, `TOKEN_DECRYPTION_FAILED`; el puerto interno falla de forma tipada. |
 | JSON inválido o campos desconocidos | `422 VALIDATION_ERROR` |
 
 - Parámetros de callback se redaccionan antes de loguear URI o error.
@@ -187,7 +203,7 @@ Métricas sin PII:
 - `outlook.authorization_attempts` con `outcome` (`started`, `success`,
   `denied`, `state_invalid`, `failed`);
 - `outlook.token_refreshes` con `outcome` (`success`, `reauth_required`,
-  `transient_failure`);
+  `transient_failure`, `decryption_failed`);
 - `outlook.connection_status` gauge por estado, sin etiquetas de cuenta.
 
 ## OpenAPI y configuración
@@ -195,8 +211,9 @@ Métricas sin PII:
 - Documentar rutas, bearer ADMIN, callback, respuestas `200`, `400`, `401`,
   `403`, `422`, `502`, `503` y ejemplos seguros en español.
 - Propiedades tipadas: tenant ID, client ID, authority, redirect URI, timeouts,
-  reintentos y `APP_BASE_URL`. `MICROSOFT_CLIENT_SECRET` y
-  `MICROSOFT_TOKEN_ENCRYPTION_KEY` sólo vienen de entorno/secret manager.
+  reintentos y `APP_BASE_URL`. `MICROSOFT_CLIENT_SECRET`,
+  `MICROSOFT_TOKEN_ENCRYPTION_KEY` y
+  `MICROSOFT_TOKEN_ENCRYPTION_KEY_VERSION` sólo vienen de entorno/secret manager.
 - Perfil `test` usa valores ficticios y un doble HTTP; nunca llama Microsoft ni
   usa secreto real. Fallar rápido en `prod` si faltan propiedades obligatorias.
 
@@ -207,7 +224,7 @@ Métricas sin PII:
 - Generación y consumo único de state; vencimiento y redacción de logs.
 - PKCE `S256`, construcción de URL, allowlist de authority/redirect URI.
 - AES-GCM: ciphertext no contiene refresh token en claro, autenticación de tag,
-  key version y fallo de descifrado seguro.
+  key version y fallo de descifrado seguro a `ERROR` con ciphertext conservado.
 - Máquina de estados y clasificación de errores transitorios, `invalid_grant`
   y autorización denegada.
 
@@ -221,6 +238,8 @@ Métricas sin PII:
 - Refresh rotado reemplaza ciphertext una sola vez bajo concurrencia; dos
   callbacks concurrentes no pierden conexión ni crean auditoría inconsistente.
 - `invalid_grant` elimina credencial y llega a `REAUTHORIZATION_REQUIRED`.
+- Versión de clave no coincidente o tag AES-GCM inválido deja `ERROR`, conserva
+  ciphertext y expone sólo `TOKEN_DECRYPTION_FAILED`.
 - OpenAPI, V6 desde V1–V5, métricas y regresión `./gradlew test` más
   `git diff --check`.
 
@@ -255,6 +274,7 @@ Métricas sin PII:
 | --- | --- | --- |
 | Dependencia | Registro Entra con redirect URI exacta y permisos aprobados. | Validar configuración al arranque; doble en pruebas. |
 | Riesgo | Rotación pierde refresh token. | Cifrado y reemplazo transaccional serializado. |
+| Riesgo | Clave de cifrado ausente, versión no coincidente o ciphertext ilegible. | Pasar a `ERROR`, conservar ciphertext y exponer sólo `TOKEN_DECRYPTION_FAILED`; no llamar Microsoft. |
 | Riesgo | Callback CSRF/replay. | State hash, PKCE, vencimiento y consumo único. |
 | Riesgo | Logs filtran OAuth. | Redacción central y pruebas de ausencia. |
 | Dependencia futura | Lectura Inbox requiere permiso Graph adicional justificado. | No solicitar ni usar `Mail.Read` hasta spec de descubrimiento. |
@@ -262,3 +282,7 @@ Métricas sin PII:
 ## Definition of Ready
 
 `READY_FOR_DEV`
+
+005 solicita únicamente `openid`, `profile` y `offline_access`; valida el
+`id_token` sin llamar a Microsoft Graph. El permiso de Inbox pertenece a 006 y
+no bloquea la conexión inicial.
