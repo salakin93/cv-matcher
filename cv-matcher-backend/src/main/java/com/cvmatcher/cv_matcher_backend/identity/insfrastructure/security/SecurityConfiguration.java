@@ -53,20 +53,21 @@ public class SecurityConfiguration {
                         .requireCsrfProtectionMatcher(r -> HttpMethod.POST.name().equals(r.getMethod()) && ("/api/v1/auth/refresh".equals(r.getRequestURI()) || "/api/v1/auth/logout".equals(r.getRequestURI()))))
                 .cors(Customizer.withDefaults()).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a.requestMatchers(
-                        "/error",
-                        "/api/v1/auth/register",
-                        "/api/v1/auth/login",
-                        "/api/v1/auth/refresh",
-                        "/api/v1/auth/logout",
-                        "/api/v1/auth/email-verification/**",
-                        "/api/v1/auth/email-change/confirm",
-                        "/api/v1/auth/password-reset/**",
-                        "/actuator/health/**",
-                        "/v3/api-docs/**",
-                        "/swagger-ui.html",
-                        "/swagger-ui/**"
-                ).permitAll().requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/v1/vacancies/**", "/api/v1/report-jobs/**").hasAnyRole("RECRUITER", "ADMIN").anyRequest().authenticated())
+                                "/error",
+                                "/api/v1/auth/register",
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/refresh",
+                                "/api/v1/auth/logout",
+                                "/api/v1/auth/email-verification/**",
+                                "/api/v1/auth/email-change/confirm",
+                                "/api/v1/auth/password-reset/**",
+                                "/actuator/health/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui.html",
+                                "/swagger-ui/**"
+                        ).permitAll().requestMatchers("/api/v1/admin/integrations/outlook/callback")
+                        .permitAll().requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/vacancies/**", "/api/v1/report-jobs/**").hasAnyRole("RECRUITER", "ADMIN").anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, exception) ->
                                 write(mapper, request, response, 401, "UNAUTHENTICATED", "No autenticado"))

@@ -1,4 +1,16 @@
 app:
+  outlook:
+    tenant-id: test-tenant
+    client-id: test-client
+    client-secret: test-client-secret
+    authority: http://localhost:18080
+    redirect-uri: http://localhost:6060/api/v1/admin/integrations/outlook/callback
+    app-base-url: http://localhost:5173
+    token-encryption-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    token-encryption-key-version: 1
+    connect-timeout: 1s
+    read-timeout: 1s
+    max-retries: 3
   security:
     secure-cookies: false
   cors:

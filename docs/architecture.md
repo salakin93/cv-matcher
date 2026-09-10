@@ -119,6 +119,7 @@ Entidades principales iniciales: `user_account`, `user_session`, `email_verifica
 Estados mínimos: `QUEUED`, `DISCOVERING`, `INGESTING_DOCUMENTS`, `ANALYZING`, `COMPLETED`, `COMPLETED_WITH_WARNINGS`, `FAILED`, `REAUTHORIZATION_REQUIRED`, `CANCELLED`.
 
 - Crear o reintentar un reporte persiste el job en una transacción breve y lo despacha sólo después de commit.
+- Los correos originados por una mutación de negocio se registran en un outbox durable dentro de la misma transacción. Un despachador los entrega después de commit con reintentos acotados; un fallo de SMTP nunca revierte una cuenta, sesión, token o job ya confirmado.
 - Un worker reclama un job mediante claim/lease transaccional en PostgreSQL. El lease vence y permite recuperación segura tras reinicio; dos instancias no procesan el mismo job.
 - Las llamadas Graph, ClamAV, extracción y Claude se realizan fuera de transacciones de base de datos. Persistencia de estados, contadores, checkpoint y resultado se hace en transacciones breves.
 - Checkpoints no contienen CV, texto, tokens ni PII innecesaria. Reintentos/replay no duplican mensajes, adjuntos, documentos, candidatos ni counters.
@@ -176,7 +177,7 @@ Perfiles permitidos: `local`, `test`, `prod`. La configuración usa `application
 | Grupo | Variables representativas |
 | --- | --- |
 | Base de datos | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` |
-| Seguridad | `JWT_SIGNING_KEY`, `APP_BASE_URL`, `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD` |
+| Seguridad | `JWT_SIGNING_KEY`, `APP_BASE_URL`, `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_PASSWORD`, `IDENTITY_OUTBOX_ENCRYPTION_KEY` |
 | Documentos | `CV_STORAGE_ROOT`, `CV_DOCUMENT_ENCRYPTION_KEY`, límites de tamaño |
 | Microsoft | `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT_ID`, `MICROSOFT_REDIRECT_URI`, `MICROSOFT_TOKEN_ENCRYPTION_KEY`, `MICROSOFT_TOKEN_ENCRYPTION_KEY_VERSION` |
 | Claude | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` |
@@ -215,6 +216,8 @@ No se declara rollback automático de datos. Cada spec con migraciones debe docu
 | ARCHITECTURAL DECISION | Auth web | JWT corto + refresh token opaco rotativo en cookie segura. |
 | ARCHITECTURAL DECISION | Archivos | Almacenamiento privado cifrado AES-GCM, no blobs de CV en PostgreSQL. |
 | ARCHITECTURAL DECISION | Integraciones | Adaptadores server-side, dobles en pruebas y sin llamadas reales. |
+| ARCHITECTURAL DECISION | Límites internos | Los módulos consumen puertos y contratos propios; no dependen de tipos anidados de servicios concretos ni acceden directamente a tablas de otro módulo. Auditoría, errores HTTP y correlation ID usan componentes compartidos. |
+| ARCHITECTURAL DECISION | Correo transaccional | El outbox durable es el único punto de salida para correo originado por mutaciones confirmadas. |
 | RISK | Outlook | Registro de Entra, redirect URI, consentimiento y vigencia del secret deben estar configurados antes del incremento Graph. |
 | RISK | Correo | SMTP/dominio remitente debe estar disponible antes de activar flujos reales de verificación, recuperación o notificación. |
 | RISK | Privacidad | Antes de producción, el responsable debe confirmar base legal, aviso de privacidad, acceso de Anthropic a texto de CV y política de backup/purga. |

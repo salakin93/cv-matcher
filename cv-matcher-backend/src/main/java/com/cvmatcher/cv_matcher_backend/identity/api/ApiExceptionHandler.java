@@ -4,14 +4,15 @@ import com.cvmatcher.cv_matcher_backend.administration.application.Administratio
 import com.cvmatcher.cv_matcher_backend.identity.application.PasswordPolicyException;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import com.cvmatcher.cv_matcher_backend.job.application.JobException;
+import com.cvmatcher.cv_matcher_backend.outlook.application.OutlookException;
 import com.cvmatcher.cv_matcher_backend.vacancy.application.VacancyException;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -77,6 +78,11 @@ class ApiExceptionHandler {
         return error(exception.status(), exception.code(), "La operaciÃ³n no puede completarse.", request);
     }
 
+    @ExceptionHandler(OutlookException.class)
+    ResponseEntity<ApiError> handleOutlook(OutlookException exception, HttpServletRequest request) {
+        return error(exception.status(), exception.code(), "La operación no puede completarse.", request);
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     ResponseEntity<ApiError> handleConflict(HttpServletRequest request) {
         return error(HttpStatus.CONFLICT, "CONFLICT", "La operación no puede completarse.", request);
@@ -109,7 +115,8 @@ class ApiExceptionHandler {
         if (path.startsWith("/api/v1/vacancies/") && path.endsWith("/report-jobs")) action = "enqueue";
         if (path.startsWith("/api/v1/report-jobs/") && path.endsWith("/cancel")) action = "cancel";
         if (path.startsWith("/api/v1/report-jobs/") && path.endsWith("/retry")) action = "retry";
-        if (action != null) metrics.counter("matching_jobs.mutations", "action", action, "outcome", "validation_error").increment();
+        if (action != null)
+            metrics.counter("matching_jobs.mutations", "action", action, "outcome", "validation_error").increment();
     }
 
 }

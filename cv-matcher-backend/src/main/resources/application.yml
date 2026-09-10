@@ -22,6 +22,9 @@ spring:
       include-message: never
       include-stacktrace: never
 
+server:
+  port: ${SERVER_PORT:6060}
+
 springdoc:
   api-docs:
     path: /v3/api-docs
@@ -37,6 +40,18 @@ logging:
         correlationId: "%X{correlationId:-}"
 
 app:
+  outlook:
+    tenant-id: ${MICROSOFT_TENANT_ID:}
+    client-id: ${MICROSOFT_CLIENT_ID:}
+    client-secret: ${MICROSOFT_CLIENT_SECRET:}
+    authority: ${MICROSOFT_AUTHORITY:}
+    redirect-uri: ${MICROSOFT_REDIRECT_URI:}
+    app-base-url: ${APP_BASE_URL:http://localhost:5173}
+    token-encryption-key: ${MICROSOFT_TOKEN_ENCRYPTION_KEY:}
+    token-encryption-key-version: ${MICROSOFT_TOKEN_ENCRYPTION_KEY_VERSION:1}
+    connect-timeout: ${MICROSOFT_CONNECT_TIMEOUT:5s}
+    read-timeout: ${MICROSOFT_READ_TIMEOUT:10s}
+    max-retries: ${MICROSOFT_MAX_RETRIES:3}
   security:
     jwt-signing-key: ${JWT_SIGNING_KEY}
     access-token-minutes: ${ACCESS_TOKEN_MINUTES:15}
