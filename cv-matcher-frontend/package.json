@@ -12,7 +12,7 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "check:cors": "node scripts/check-cors.mjs",
-    "api:generate": "openapi-typescript http://localhost:8080/v3/api-docs -o src/api/generated.ts",
+    "api:generate": "node scripts/generate-openapi.mjs",
     "api:check": "node scripts/check-openapi.mjs"
   },
   "dependencies": {

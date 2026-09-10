@@ -1,5 +1,3 @@
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
-
 export type ApiError = { status: number; code?: string; message: string; correlationId?: string };
 
 export class ApiFailure extends Error {
@@ -8,6 +6,12 @@ export class ApiFailure extends Error {
 
 function csrfToken() {
   return document.cookie.split("; ").find((cookie) => cookie.startsWith("XSRF-TOKEN="))?.split("=")[1];
+}
+
+function apiBaseUrl() {
+  const value = import.meta.env.VITE_API_BASE_URL;
+  if (!value) throw new Error("Falta VITE_API_BASE_URL.");
+  return value.replace(/\/$/, "");
 }
 
 export async function request<T>(path: string, init: RequestInit = {}, accessToken?: string): Promise<T> {
@@ -19,7 +23,7 @@ export async function request<T>(path: string, init: RequestInit = {}, accessTok
     const csrf = csrfToken();
     if (csrf) headers.set("X-CSRF-TOKEN", decodeURIComponent(csrf));
   }
-  const response = await fetch(`${baseUrl}/api/v1${path}`, { ...init, headers, credentials: "include" });
+  const response = await fetch(`${apiBaseUrl()}/api/v1${path}`, { ...init, headers, credentials: "include" });
   if (!response.ok) {
     const detail = await response.json().catch(() => ({ status: response.status, message: "No se pudo completar la solicitud." }));
     throw new ApiFailure({ status: response.status, message: detail.message ?? "No se pudo completar la solicitud.", code: detail.code, correlationId: detail.correlationId });

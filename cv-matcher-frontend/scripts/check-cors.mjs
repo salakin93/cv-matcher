@@ -1,11 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { loadEnv } from "vite";
 
-const rootEnv = resolve(dirname(fileURLToPath(import.meta.url)), "../../.env");
-const requiredOrigin = "http://localhost:5173";
+const frontendRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const rootEnv = resolve(frontendRoot, "../.env");
+const requiredOrigin = loadEnv(process.env.NODE_ENV ?? "development", frontendRoot, "VITE_").VITE_FRONTEND_ORIGIN;
 
-if (!existsSync(rootEnv)) {
+if (!requiredOrigin) {
+  console.error("CORS no verificado: falta VITE_FRONTEND_ORIGIN en el entorno frontend.");
+  process.exitCode = 1;
+} else if (!existsSync(rootEnv)) {
   console.error("CORS no verificado: falta el archivo .env local.");
   process.exitCode = 1;
 } else {

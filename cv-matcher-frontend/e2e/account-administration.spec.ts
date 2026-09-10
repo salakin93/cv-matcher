@@ -1,21 +1,22 @@
 import { expect, test, type Page } from "@playwright/test";
+import { apiPath, apiRoute } from "./routes";
 
 const admin = { id: "admin-id", fullName: "Ana Administradora", email: "admin@example.test", role: "ADMIN", status: "ACTIVE", forcePasswordChange: false };
 const account = { id: "target-id", fullName: "Bruno Reclutador", email: "bruno@example.test", role: "RECRUITER", status: "ACTIVE", emailVerifiedAt: "2026-09-08T12:00:00Z", forcePasswordChange: false, updatedAt: "2026-09-08T12:00:00Z" };
 
 async function mockAdmin(page: Page, accountResponse: { status: number; body?: object } = { status: 200, body: { items: [account], page: 0, size: 20, totalItems: 1, totalPages: 1 } }) {
-  await page.route("http://localhost:8080/api/v1/auth/**", async (route) => {
-    const endpoint = new URL(route.request().url()).pathname.replace("/api/v1/auth", "");
+  await page.route(apiRoute("/auth/**"), async (route) => {
+    const endpoint = new URL(route.request().url()).pathname.replace(apiPath("/auth"), "");
     const response = endpoint === "/refresh" ? { status: 200, body: { accessToken: "access-token", tokenType: "Bearer", expiresIn: 900, user: admin, forcePasswordChange: false } } : { status: 204 };
     await route.fulfill({ status: response.status, contentType: response.body ? "application/json" : undefined, body: response.body ? JSON.stringify(response.body) : undefined });
   });
-  await page.route("http://localhost:8080/api/v1/admin/users?**", async (route) => route.fulfill({ status: accountResponse.status, contentType: accountResponse.body ? "application/json" : undefined, body: accountResponse.body ? JSON.stringify(accountResponse.body) : undefined }));
+  await page.route(apiRoute("/admin/users?**"), async (route) => route.fulfill({ status: accountResponse.status, contentType: accountResponse.body ? "application/json" : undefined, body: accountResponse.body ? JSON.stringify(accountResponse.body) : undefined }));
 }
 
 test("un ADMIN lista, filtra y confirma el cambio antes de enviarlo", async ({ page }) => {
   await mockAdmin(page);
   let patches = 0;
-  await page.route("http://localhost:8080/api/v1/admin/users/target-id/status", async (route) => { patches += 1; await route.fulfill({ status: 204 }); });
+  await page.route(apiRoute("/admin/users/target-id/status"), async (route) => { patches += 1; await route.fulfill({ status: 204 }); });
   await page.goto("/administracion/usuarios");
   await expect(page.getByRole("heading", { name: "Cuentas de usuarios" })).toBeVisible();
   await expect(page.getByText("bruno@example.test")).toBeVisible();
@@ -30,9 +31,9 @@ test("un ADMIN lista, filtra y confirma el cambio antes de enviarlo", async ({ p
 test("cambia un rol y recarga la página actual", async ({ page }) => {
   let lists = 0;
   await mockAdmin(page);
-  await page.route("http://localhost:8080/api/v1/admin/users/target-id/role", async (route) => route.fulfill({ status: 204 }));
-  await page.unroute("http://localhost:8080/api/v1/admin/users?**");
-  await page.route("http://localhost:8080/api/v1/admin/users?**", async (route) => { lists += 1; await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [account], page: 0, size: 20, totalItems: 1, totalPages: 1 }) }); });
+  await page.route(apiRoute("/admin/users/target-id/role"), async (route) => route.fulfill({ status: 204 }));
+  await page.unroute(apiRoute("/admin/users?**"));
+  await page.route(apiRoute("/admin/users?**"), async (route) => { lists += 1; await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [account], page: 0, size: 20, totalItems: 1, totalPages: 1 }) }); });
   await page.goto("/administracion/usuarios");
   await page.getByRole("button", { name: "Cambiar rol" }).click();
   await page.getByRole("button", { name: "Confirmar" }).click();
@@ -41,8 +42,8 @@ test("cambia un rol y recarga la página actual", async ({ page }) => {
 
 test("pagina y reinicia a la primera página al cambiar un filtro", async ({ page }) => {
   const queries: string[] = [];
-  await page.route("http://localhost:8080/api/v1/auth/**", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accessToken: "access-token", tokenType: "Bearer", expiresIn: 900, user: admin, forcePasswordChange: false }) }));
-  await page.route("http://localhost:8080/api/v1/admin/users?**", async (route) => {
+  await page.route(apiRoute("/auth/**"), async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accessToken: "access-token", tokenType: "Bearer", expiresIn: 900, user: admin, forcePasswordChange: false }) }));
+  await page.route(apiRoute("/admin/users?**"), async (route) => {
     const url = new URL(route.request().url());
     queries.push(url.search);
     const currentPage = Number(url.searchParams.get("page"));
@@ -83,7 +84,7 @@ test("el diálogo contiene el foco, cierra con Escape y lo restaura al disparado
 test("un conflicto administrativo se muestra de forma segura y no se reintenta", async ({ page }) => {
   await mockAdmin(page);
   let patches = 0;
-  await page.route("http://localhost:8080/api/v1/admin/users/target-id/status", async (route) => { patches += 1; await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ status: 409, code: "LAST_ACTIVE_ADMIN", message: "Interno", correlationId: "trace-123" }) }); });
+  await page.route(apiRoute("/admin/users/target-id/status"), async (route) => { patches += 1; await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ status: 409, code: "LAST_ACTIVE_ADMIN", message: "Interno", correlationId: "trace-123" }) }); });
   await page.goto("/administracion/usuarios");
   await page.getByRole("button", { name: "Desactivar" }).click();
   await page.getByRole("button", { name: "Confirmar" }).click();
@@ -93,8 +94,8 @@ test("un conflicto administrativo se muestra de forma segura y no se reintenta",
 
 test("permite reintentar el listado después de un 403 sin conservar cuentas", async ({ page }) => {
   let requests = 0;
-  await page.route("http://localhost:8080/api/v1/auth/**", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accessToken: "access-token", tokenType: "Bearer", expiresIn: 900, user: admin, forcePasswordChange: false }) }));
-  await page.route("http://localhost:8080/api/v1/admin/users?**", async (route) => {
+  await page.route(apiRoute("/auth/**"), async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accessToken: "access-token", tokenType: "Bearer", expiresIn: 900, user: admin, forcePasswordChange: false }) }));
+  await page.route(apiRoute("/admin/users?**"), async (route) => {
     requests += 1;
     const response = requests <= 2 ? { status: 403, body: { status: 403, code: "FORBIDDEN", message: "Interno" } } : { status: 200, body: { items: [account], page: 0, size: 20, totalItems: 1, totalPages: 1 } };
     await route.fulfill({ status: response.status, contentType: "application/json", body: JSON.stringify(response.body) });
@@ -109,7 +110,7 @@ test("permite reintentar el listado después de un 403 sin conservar cuentas", a
 for (const [code, message] of [["VALIDATION_ERROR", "solicitud no es válida"], ["USER_NOT_FOUND", "cuenta ya no está disponible"]] as const) {
   test(`mantiene el diálogo y muestra ${code} junto a la confirmación`, async ({ page }) => {
     await mockAdmin(page);
-    await page.route("http://localhost:8080/api/v1/admin/users/target-id/status", async (route) => route.fulfill({ status: code === "VALIDATION_ERROR" ? 422 : 404, contentType: "application/json", body: JSON.stringify({ status: code === "VALIDATION_ERROR" ? 422 : 404, code, message: "Interno" }) }));
+    await page.route(apiRoute("/admin/users/target-id/status"), async (route) => route.fulfill({ status: code === "VALIDATION_ERROR" ? 422 : 404, contentType: "application/json", body: JSON.stringify({ status: code === "VALIDATION_ERROR" ? 422 : 404, code, message: "Interno" }) }));
     await page.goto("/administracion/usuarios");
     await page.getByRole("button", { name: "Desactivar" }).click();
     await page.getByRole("button", { name: "Confirmar" }).click();
@@ -121,7 +122,7 @@ for (const [code, message] of [["VALIDATION_ERROR", "solicitud no es válida"], 
 for (const [code, message] of [["SELF_ADMINISTRATION_FORBIDDEN", "No puedes cambiar tu propio rol"], ["EMAIL_NOT_VERIFIED", "debe verificar su correo"]] as const) {
   test(`muestra el conflicto ${code} sin reintentar`, async ({ page }) => {
     await mockAdmin(page);
-    await page.route("http://localhost:8080/api/v1/admin/users/target-id/status", async (route) => route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ status: 409, code, message: "Interno" }) }));
+    await page.route(apiRoute("/admin/users/target-id/status"), async (route) => route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ status: 409, code, message: "Interno" }) }));
     await page.goto("/administracion/usuarios");
     await page.getByRole("button", { name: "Desactivar" }).click();
     await page.getByRole("button", { name: "Confirmar" }).click();
@@ -131,19 +132,19 @@ for (const [code, message] of [["SELF_ADMINISTRATION_FORBIDDEN", "No puedes camb
 
 test("una sesión revocada redirige a login sin mostrar datos administrativos", async ({ page }) => {
   let refreshes = 0;
-  await page.route("http://localhost:8080/api/v1/auth/refresh", async (route) => {
+  await page.route(apiRoute("/auth/refresh"), async (route) => {
     refreshes += 1;
     const response = refreshes === 1 ? { status: 200, body: { accessToken: "access-token", tokenType: "Bearer", expiresIn: 900, user: admin, forcePasswordChange: false } } : { status: 401, body: { status: 401, code: "UNAUTHENTICATED", message: "No autenticado" } };
     await route.fulfill({ status: response.status, contentType: "application/json", body: JSON.stringify(response.body) });
   });
-  await page.route("http://localhost:8080/api/v1/admin/users?**", async (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ status: 401, code: "UNAUTHENTICATED", message: "No autenticado" }) }));
+  await page.route(apiRoute("/admin/users?**"), async (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ status: 401, code: "UNAUTHENTICATED", message: "No autenticado" }) }));
   await page.goto("/administracion/usuarios");
   await expect(page).toHaveURL(/\/ingresar$/);
   await expect(page.getByText("Cuentas de usuarios")).not.toBeVisible();
 });
 
 test("un RECRUITER no puede abrir la ruta administrativa", async ({ page }) => {
-  await page.route("http://localhost:8080/api/v1/auth/**", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accessToken: "access-token", tokenType: "Bearer", expiresIn: 900, user: { ...admin, role: "RECRUITER" }, forcePasswordChange: false }) }));
+  await page.route(apiRoute("/auth/**"), async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ accessToken: "access-token", tokenType: "Bearer", expiresIn: 900, user: { ...admin, role: "RECRUITER" }, forcePasswordChange: false }) }));
   await page.goto("/administracion/usuarios");
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "Hola, Ana Administradora" })).toBeVisible();

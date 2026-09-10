@@ -4,11 +4,12 @@ SPA de CV Matcher construida con React 19, TypeScript, Vite, Tailwind CSS y shad
 
 ## Desarrollo
 
-1. Configura el backend con `CORS_ALLOWED_ORIGINS=http://localhost:5173`.
-2. Ejecuta `npm install`.
-3. Con backend disponible en `http://localhost:8080`, ejecuta `npm run api:generate`. El archivo generado `src/api/generated.ts` se versiona y no se edita manualmente.
-4. Ejecuta `npm run api:check` para comprobar que el artefacto contiene paths y operaciones generados.
-4. Ejecuta `npm run dev`.
+1. Copia `.env.example` a `.env` y configura `VITE_API_BASE_URL` y `VITE_FRONTEND_ORIGIN`.
+2. Configura el backend con `CORS_ALLOWED_ORIGINS` igual a `VITE_FRONTEND_ORIGIN`.
+3. Ejecuta `npm install`.
+4. Con el backend disponible en `VITE_API_BASE_URL`, ejecuta `npm run api:generate`. El archivo generado `src/api/generated.ts` se versiona y no se edita manualmente.
+5. Ejecuta `npm run api:check` para comprobar que el artefacto contiene paths y operaciones generados.
+6. Ejecuta `npm run dev`.
 
 ## Validación
 

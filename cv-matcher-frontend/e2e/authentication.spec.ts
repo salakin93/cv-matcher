@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { apiPath, apiRoute } from "./routes";
 
 const user = {
   id: "user-id",
@@ -10,8 +11,8 @@ const user = {
 };
 
 async function mockAuth(page: Page, overrides: Record<string, { status: number; body?: object }> = {}) {
-  await page.route("http://localhost:8080/api/v1/auth/**", async (route) => {
-    const endpoint = new URL(route.request().url()).pathname.replace("/api/v1/auth", "");
+  await page.route(apiRoute("/auth/**"), async (route) => {
+    const endpoint = new URL(route.request().url()).pathname.replace(apiPath("/auth"), "");
     const response = overrides[endpoint] ?? (endpoint === "/refresh"
       ? { status: 401, body: { status: 401, code: "UNAUTHENTICATED", message: "No autenticado" } }
       : endpoint === "/login"
@@ -103,7 +104,7 @@ test("muestra validación segura de registro", async ({ page }) => {
 test("evita doble envío de registro mientras la solicitud está pendiente", async ({ page }) => {
   await mockAuth(page);
   let finishRequest!: () => void;
-  await page.route("http://localhost:8080/api/v1/auth/register", async (route) => {
+  await page.route(apiRoute("/auth/register"), async (route) => {
     await new Promise<void>((resolve) => { finishRequest = resolve; });
     await route.fulfill({ status: 202 });
   });
@@ -123,7 +124,7 @@ test("evita doble envío de registro mientras la solicitud está pendiente", asy
 test("evita doble envío de cambio de contraseña mientras la solicitud está pendiente", async ({ page }) => {
   await mockAuth(page, { "/refresh": { status: 200, body: { accessToken: "access-token", tokenType: "Bearer", expiresIn: 900, user, forcePasswordChange: false } } });
   let finishRequest!: () => void;
-  await page.route("http://localhost:8080/api/v1/auth/password/change", async (route) => {
+  await page.route(apiRoute("/auth/password/change"), async (route) => {
     await new Promise<void>((resolve) => { finishRequest = resolve; });
     await route.fulfill({ status: 204 });
   });
@@ -183,7 +184,7 @@ test("renueva la sesión y reintenta una operación autenticada tras 401", async
     "/refresh": { status: 200, body: { accessToken: "access-token", tokenType: "Bearer", expiresIn: 900, user, forcePasswordChange: false } },
   });
   let attempts = 0;
-  await page.route("http://localhost:8080/api/v1/auth/email-change/request", async (route) => {
+  await page.route(apiRoute("/auth/email-change/request"), async (route) => {
     attempts += 1;
     await route.fulfill(attempts === 1
       ? { status: 401, contentType: "application/json", body: JSON.stringify({ status: 401, message: "No autenticado" }) }
@@ -203,7 +204,7 @@ test("renueva la sesión y reintenta una operación autenticada tras 401", async
 test("descarta el refresh inicial tardío después de un login", async ({ page }) => {
   await mockAuth(page);
   let releaseRefresh!: () => void;
-  await page.route("http://localhost:8080/api/v1/auth/refresh", async (route) => {
+  await page.route(apiRoute("/auth/refresh"), async (route) => {
     await new Promise<void>((resolve) => { releaseRefresh = resolve; });
     await route.fulfill({
       status: 200,
