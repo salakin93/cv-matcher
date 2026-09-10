@@ -35,6 +35,10 @@ No repetir ni reinterpretar reglas globales ya definidas en los archivos de cont
 - considerar seguridad, privacidad, observabilidad y auditoría;
 - definir criterios de aceptación directamente verificables;
 - identificar dependencias, riesgos y preguntas abiertas.
+- registrar en `docs/architecture.md` la ubicación única de configuración
+  transversal (config externa, cliente HTTP centralizado, constantes de
+  negocio compartidas) cuando el incremento la introduzca por primera vez o
+  la modifique;
 
 Cuando una decisión arquitectónica aprobada afecte a más de un incremento,
 registrarla también en `docs/architecture.md`. Una spec conserva las decisiones
@@ -58,6 +62,20 @@ No convertir una suposición en requisito confirmado.
 
 Mantener las reglas deterministas en backend y tratar respuestas externas/LLM
 como datos no confiables.
+
+## Configuración centralizada (SSOT)
+
+Cuando la spec introduzca un nuevo punto de configuración externa (host,
+puerto, credenciales, timeouts) o un nuevo cliente de integración:
+
+- Indicar explícitamente en qué archivo/módulo debe vivir esa configuración
+  (ej. `application.yml` + clase `@ConfigurationProperties`, o
+  `src/api/client.ts`), en vez de dejarlo implícito para que DEV decida.
+- Si ya existe una ubicación centralizada definida en `docs/architecture.md`,
+  referenciarla en la spec en vez de crear una nueva.
+- No dividir en la spec configuración que debería vivir en un único lugar
+  transversal; eso es una `ARCHITECTURAL DECISION`, no un detalle de
+  implementación de un incremento.
 
 ## Definition of Ready
 
@@ -89,6 +107,7 @@ Formato mínimo:
 ### Excluido
 ## Comportamiento y reglas
 ## Contratos
+## Configuración centralizada
 ## Datos y persistencia
 ## Integraciones
 ## Errores y estados
