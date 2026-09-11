@@ -69,10 +69,14 @@ final class OutlookConnectionStore {
         });
     }
 
-    void markDecryptionFailed() {
-        transactions.executeWithoutResult(status -> {
+    boolean markDecryptionFailed(Connection expectedConnection) {
+        return transactions.execute(status -> {
             lock();
+            var current = connection();
+            if (current == null || current.version() != expectedConnection.version()
+                    || !Arrays.equals(current.ciphertext(), expectedConnection.ciphertext())) return false;
             jdbc.update("update outlook_connection set status='ERROR',last_error_code='TOKEN_DECRYPTION_FAILED',updated_at=current_timestamp,version=version+1 where id=1");
+            return true;
         });
     }
 

@@ -68,8 +68,10 @@ incremento no lee mensajes, adjuntos ni documentos.
 
 ## Modelo y persistencia
 
-Crear exclusivamente la migración inmutable `V6__outlook_connection.sql`; no
-modificar V1–V5.
+Crear la migración inmutable `V6__outlook_connection.sql`; no modificar V1–V5.
+La corrección aprobada por Technical Review se implementa exclusivamente mediante
+`V8__outlook_connection_invariants.sql`; `V7` permanece reservado para el outbox
+de identidad de Spec 025.
 
 ### `outlook_connection`
 

@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -125,6 +126,51 @@ class OutlookIntegrationTest {
     }
 
     @Test
+    void startAuthorizationDeletesExpiredAttemptsAndRetainsAnotherActorsValidAttempt() throws Exception {
+        var expiredActor = user("outlook-expired-start@example.test", "ADMIN");
+        var validActor = user("outlook-valid-start@example.test", "ADMIN");
+        startAuthorizationAttempt("Bearer " + jwt.issue(validActor, "ADMIN", session(validActor)));
+        insertExpiredAttempt(expiredActor);
+
+        startAuthorization(adminBearer("outlook-expired-start-actor@example.test"));
+
+        assertEquals(0L, jdbc.queryForObject("select count(*) from outlook_authorization_attempt where expires_at<=current_timestamp", Long.class));
+        assertValidUnconsumedAttempt(validActor);
+    }
+
+    @Test
+    void concurrentStartsByTheSameActorLeaveOnlyTheLatestActiveAttempt() throws Exception {
+        var bearer = adminBearer("outlook-concurrent-start@example.test");
+        var ready = new CountDownLatch(2);
+        var release = new CountDownLatch(1);
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<String> first = executor.submit(() -> concurrentStart(bearer, ready, release));
+            Future<String> second = executor.submit(() -> concurrentStart(bearer, ready, release));
+            assertTrue(ready.await(10, TimeUnit.SECONDS));
+            release.countDown();
+            assertNotEquals(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+        }
+
+        assertEquals(1L, jdbc.queryForObject("select count(*) from outlook_authorization_attempt where initiated_by_user_id=(select id from user_account where email_normalized=?) and consumed_at is null and expires_at>current_timestamp", Long.class, "outlook-concurrent-start@example.test"));
+    }
+
+    @Test
+    void consumeAuthorizationDeletesExpiredAttemptsAndRetainsAnotherActorsValidAttempt() throws Exception {
+        var authorization = startAuthorizationAttempt(adminBearer("outlook-expired-consume@example.test"));
+        var validActor = user("outlook-valid-consume@example.test", "ADMIN");
+        startAuthorizationAttempt("Bearer " + jwt.issue(validActor, "ADMIN", session(validActor)));
+        insertExpiredAttempt(user("outlook-expired-consume-actor@example.test", "ADMIN"));
+        ID_TOKEN.set(signedIdToken(issuer(), "test-client", "test-tenant", Instant.now().plusSeconds(300), authorization.nonce(), false));
+
+        mockMvc.perform(get("/api/v1/admin/integrations/outlook/callback").param("state", authorization.state()).param("code", "test-code"))
+                .andExpect(status().isFound());
+
+        assertEquals(0L, jdbc.queryForObject("select count(*) from outlook_authorization_attempt where expires_at<=current_timestamp", Long.class));
+        assertValidUnconsumedAttempt(validActor);
+    }
+
+    @Test
     void oidcValidationAcceptsSignedTokenWithExpectedIssuerAudienceTenantExpiryAndNonce() throws Exception {
         var actor = user("outlook-oidc-valid@example.test", "ADMIN");
         var authorization = startAuthorizationAttempt("Bearer " + jwt.issue(actor, "ADMIN", session(actor)));
@@ -146,6 +192,26 @@ class OutlookIntegrationTest {
         assertOidcTokenRejected("expired token", authorization -> signedIdToken(issuer(), "test-client", "test-tenant", Instant.now().minusSeconds(300), authorization.nonce(), false));
         assertOidcTokenRejected("invalid signature", authorization -> signedIdToken(issuer(), "test-client", "test-tenant", Instant.now().plusSeconds(300), authorization.nonce(), true));
         assertOidcTokenRejected("wrong nonce", authorization -> signedIdToken(issuer(), "test-client", "test-tenant", Instant.now().plusSeconds(300), "other-nonce", false));
+    }
+
+    @Test
+    void oidcValidationRejectsMissingOrBlankSubjectBeforeConnectionPersistence() throws Exception {
+        assertOidcTokenRejected("missing subject", authorization -> signedIdToken(issuer(), "test-client", "test-tenant", Instant.now().plusSeconds(300), authorization.nonce(), false, null));
+        assertOidcTokenRejected("blank subject", authorization -> signedIdToken(issuer(), "test-client", "test-tenant", Instant.now().plusSeconds(300), authorization.nonce(), false, "  "));
+    }
+
+    @Test
+    void migrationEnforcesCanonicalScopesAndConnectedFields() {
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("update outlook_connection set granted_scopes=? where id=1", (Object) new String[]{"profile", "openid", "offline_access"}));
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("update outlook_connection set granted_scopes=? where id=1", (Object) new String[]{"offline_access", "openid", "openid", "profile"}));
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("update outlook_connection set granted_scopes=? where id=1", (Object) new String[]{" offline_access", "openid", "profile"}));
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("update outlook_connection set granted_scopes=? where id=1", (Object) new String[]{"offline_access", "", "openid", "profile"}));
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("update outlook_connection set granted_scopes=? where id=1", (Object) new String[]{"offline_access", "   ", "openid", "profile"}));
+
+        assertConnectedConstraintRejects(null, "tenant", "subject", new String[]{"offline_access", "openid", "profile"});
+        assertConnectedConstraintRejects(new byte[]{1}, " ", "subject", new String[]{"offline_access", "openid", "profile"});
+        assertConnectedConstraintRejects(new byte[]{1}, "tenant", " ", new String[]{"offline_access", "openid", "profile"});
+        assertConnectedConstraintRejects(new byte[]{1}, "tenant", "subject", new String[]{});
     }
 
     @Test
@@ -392,6 +458,12 @@ class OutlookIntegrationTest {
         return new AuthorizationAttempt(body.replaceAll(".*[?&]state=([^&\\\"]+).*", "$1"), body.replaceAll(".*[?&]nonce=([^&\\\"]+).*", "$1"));
     }
 
+    private String concurrentStart(String bearer, CountDownLatch ready, CountDownLatch release) throws Exception {
+        ready.countDown();
+        assertTrue(release.await(10, TimeUnit.SECONDS));
+        return startAuthorization(bearer);
+    }
+
     private void assertOidcTokenRejected(String ignored, TokenFactory tokenFactory) throws Exception {
         var actor = user("outlook-oidc-" + UUID.randomUUID() + "@example.test", "ADMIN");
         var authorization = startAuthorizationAttempt("Bearer " + jwt.issue(actor, "ADMIN", session(actor)));
@@ -400,6 +472,20 @@ class OutlookIntegrationTest {
                 .andExpect(status().isFound())
                 .andExpect(redirectedUrl("http://localhost:5173/admin/integrations/outlook/callback?result=error"));
         assertEquals("NOT_CONNECTED", jdbc.queryForObject("select status from outlook_connection where id=1", String.class), ignored);
+    }
+
+    private void assertConnectedConstraintRejects(byte[] ciphertext, String tenantId, String subject, String[] scopes) {
+        assertThrows(DataIntegrityViolationException.class, () -> jdbc.update("update outlook_connection set status='CONNECTED',refresh_token_ciphertext=?,tenant_id=?,account_subject=?,granted_scopes=? where id=1", ciphertext, tenantId, subject, scopes));
+    }
+
+    private void insertExpiredAttempt(UUID actor) {
+        jdbc.update("insert into outlook_authorization_attempt(id,state_hash,code_verifier_ciphertext,nonce_hash,initiated_by_user_id,expires_at,created_at) values(?,?,?,?,?,?,?)",
+                UUID.randomUUID(), UUID.randomUUID().toString().getBytes(StandardCharsets.US_ASCII), new byte[]{1}, new byte[]{2}, actor,
+                Timestamp.from(Instant.now().minusSeconds(1)), Timestamp.from(Instant.now()));
+    }
+
+    private void assertValidUnconsumedAttempt(UUID actor) {
+        assertEquals(1L, jdbc.queryForObject("select count(*) from outlook_authorization_attempt where initiated_by_user_id=? and consumed_at is null and expires_at>current_timestamp", Long.class, actor));
     }
 
     private UUID user(String email, String role) {
@@ -449,8 +535,13 @@ class OutlookIntegrationTest {
     }
 
     private static String signedIdToken(String issuer, String audience, String tenant, Instant expiresAt, String nonce, boolean invalidSignature) {
+        return signedIdToken(issuer, audience, tenant, expiresAt, nonce, invalidSignature, "technical-subject");
+    }
+
+    private static String signedIdToken(String issuer, String audience, String tenant, Instant expiresAt, String nonce, boolean invalidSignature, String subject) {
         var header = base64Url("{\"alg\":\"RS256\",\"kid\":\"test-key\"}".getBytes(StandardCharsets.US_ASCII));
-        var claims = base64Url(("{\"iss\":\"" + issuer + "\",\"sub\":\"technical-subject\",\"aud\":\"" + audience + "\",\"tid\":\"" + tenant + "\",\"nonce\":\"" + nonce + "\",\"exp\":" + expiresAt.getEpochSecond() + "}").getBytes(StandardCharsets.US_ASCII));
+        var subjectClaim = subject == null ? "" : "\"sub\":\"" + subject + "\",";
+        var claims = base64Url(("{\"iss\":\"" + issuer + "\"," + subjectClaim + "\"aud\":\"" + audience + "\",\"tid\":\"" + tenant + "\",\"nonce\":\"" + nonce + "\",\"exp\":" + expiresAt.getEpochSecond() + "}").getBytes(StandardCharsets.US_ASCII));
         var signingInput = header + "." + claims;
         try {
             var signature = Signature.getInstance("SHA256withRSA");

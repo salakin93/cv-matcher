@@ -35,6 +35,8 @@ public class OutlookAuthorizationAttempts {
 
     @Transactional
     public OutlookService.Start start(UUID actor) {
+        lockActor(actor);
+        deleteExpiredAttempts();
         byte[] state = new byte[32], verifierBytes = new byte[48], nonceBytes = new byte[32];
         random.nextBytes(state);
         random.nextBytes(verifierBytes);
@@ -54,6 +56,7 @@ public class OutlookAuthorizationAttempts {
 
     Attempt consume(String state) {
         return transactions.execute(status -> {
+            deleteExpiredAttempts();
             byte[] decoded;
             try {
                 if (state == null || state.isBlank()) throw new IllegalArgumentException();
@@ -78,6 +81,15 @@ public class OutlookAuthorizationAttempts {
 
     private AesGcmCipher cipher() {
         return new AesGcmCipher(properties.tokenEncryptionKey());
+    }
+
+    private void deleteExpiredAttempts() {
+        jdbc.update("delete from outlook_authorization_attempt where expires_at<=current_timestamp");
+    }
+
+    private void lockActor(UUID actor) {
+        // The transaction-scoped lock serializes invalidation and insertion for one administrator.
+        jdbc.query("select pg_advisory_xact_lock(hashtextextended(?, 0))", result -> null, actor.toString());
     }
 
     private static byte[] hash(byte[] value) {

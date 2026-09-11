@@ -9,7 +9,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5430/cv-matcher}
     username: ${DB_USERNAME:salaco}
-    password: ${DB_PASSWORD:salaco}
+    password: ${DB_PASSWORD:}
   jpa:
     open-in-view: false
     hibernate:

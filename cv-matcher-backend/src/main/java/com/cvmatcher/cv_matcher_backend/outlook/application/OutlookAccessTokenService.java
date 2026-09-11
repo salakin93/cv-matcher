@@ -26,20 +26,21 @@ final class OutlookAccessTokenService {
     synchronized OutlookAccessTokenPort.AccessToken accessToken() {
         var cached = cachedAccessToken;
         if (cached != null && cached.expiresAt().isAfter(Instant.now().plusSeconds(60))) return cached;
-        OutlookAccessTokenPort.AccessToken mostRecentAccess = null;
         for (var attempt = 0; attempt < MAX_REFRESH_ROTATION_ATTEMPTS; attempt++) {
             var connection = connections.connection();
             if (connection == null || !"CONNECTED".equals(connection.status()))
                 throw new OutlookException(HttpStatus.SERVICE_UNAVAILABLE, "OUTLOOK_REAUTHORIZATION_REQUIRED");
             if (connection.keyVersion() != properties.tokenEncryptionKeyVersion()) {
                 cachedAccessToken = null;
-                connections.markDecryptionFailed();
-                throw new OutlookException(HttpStatus.SERVICE_UNAVAILABLE, "TOKEN_DECRYPTION_FAILED");
+                if (connections.markDecryptionFailed(connection)) {
+                    observability.tokenRefresh("decryption_failed");
+                    throw new OutlookException(HttpStatus.SERVICE_UNAVAILABLE, "TOKEN_DECRYPTION_FAILED");
+                }
+                continue;
             }
             try {
                 var token = oauthClient.refreshAccessToken(connections.decrypt(connection));
                 var access = new OutlookAccessTokenPort.AccessToken(requiredString(token.accessToken()), Instant.now().plusSeconds(token.expiresInSeconds()));
-                mostRecentAccess = access;
                 if (!connections.applyRefreshRotation(connection.ciphertext(), token.refreshToken())) continue;
                 cachedAccessToken = access;
                 observability.tokenRefresh("success");
@@ -59,14 +60,14 @@ final class OutlookAccessTokenService {
                 throw exception;
             } catch (IllegalArgumentException exception) {
                 cachedAccessToken = null;
-                connections.markDecryptionFailed();
-                observability.tokenRefresh("decryption_failed");
-                throw new OutlookException(HttpStatus.SERVICE_UNAVAILABLE, "TOKEN_DECRYPTION_FAILED");
+                if (connections.markDecryptionFailed(connection)) {
+                    observability.tokenRefresh("decryption_failed");
+                    throw new OutlookException(HttpStatus.SERVICE_UNAVAILABLE, "TOKEN_DECRYPTION_FAILED");
+                }
             }
         }
-        cachedAccessToken = mostRecentAccess;
-        observability.tokenRefresh("success");
-        return mostRecentAccess;
+        observability.tokenRefresh("transient_failure");
+        throw new OutlookException(HttpStatus.SERVICE_UNAVAILABLE, "OUTLOOK_TEMPORARILY_UNAVAILABLE");
     }
 
     void clearCache() {
