@@ -45,7 +45,7 @@ En despliegue, un proxy inverso termina TLS y publica sólo frontend/API. Postgr
 | Contenedores | Docker Compose. Desarrollo: PostgreSQL en Docker y backend/frontend locales. Despliegue: frontend, backend, PostgreSQL, proxy y servicios requeridos en Compose. |
 | Observabilidad | logs JSON estructurados, correlation ID generado por servidor, Spring Boot Actuator protegido, métricas y health checks. |
 
-Spring Boot 3.5 admite Java 25 oficialmente; la aplicación debe mantener esa combinación y no usar una versión de Boot anterior incompatible. [Requisitos de Spring Boot 3.5](https://docs.spring.io/spring-boot/3.5/system-requirements.html)
+Spring Boot 4.1.x es el baseline de la aplicación y debe mantenerse junto con Java 25; no usar una versión anterior incompatible.
 
 ## 4. Límites de módulos backend
 

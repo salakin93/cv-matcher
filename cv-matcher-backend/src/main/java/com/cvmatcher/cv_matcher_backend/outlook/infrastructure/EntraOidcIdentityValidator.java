@@ -16,6 +16,7 @@ import org.springframework.web.client.RestTemplate;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Map;
 
 @Component
 final class EntraOidcIdentityValidator implements OidcIdentityValidator {
@@ -62,10 +63,12 @@ final class EntraOidcIdentityValidator implements OidcIdentityValidator {
         var factory = requestFactory();
         try {
             var discovery = RestClient.builder().requestFactory(factory).build().get()
-                    .uri(issuer + "/.well-known/openid-configuration").retrieve().body(DiscoveryDocument.class);
-            if (discovery == null || !issuer.equals(discovery.issuer()) || discovery.jwksUri() == null || discovery.jwksUri().isBlank())
+                    .uri(issuer + "/.well-known/openid-configuration").retrieve().body(Map.class);
+            var discoveredIssuer = discovery == null ? null : discovery.get("issuer");
+            var jwksUri = discovery == null ? null : discovery.get("jwks_uri");
+            if (!issuer.equals(discoveredIssuer) || !(jwksUri instanceof String uri) || uri.isBlank())
                 throw new OutlookException(HttpStatus.BAD_GATEWAY, "OUTLOOK_AUTHORIZATION_FAILED");
-            var decoder = NimbusJwtDecoder.withJwkSetUri(discovery.jwksUri())
+            var decoder = NimbusJwtDecoder.withJwkSetUri(uri)
                     .restOperations(new RestTemplate(requestFactory())).build();
             decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
             return decoder;
@@ -90,9 +93,6 @@ final class EntraOidcIdentityValidator implements OidcIdentityValidator {
             if (cause instanceof ResourceAccessException || cause instanceof SocketTimeoutException) return true;
         }
         return false;
-    }
-
-    private record DiscoveryDocument(String issuer, @tools.jackson.annotation.JsonProperty("jwks_uri") String jwksUri) {
     }
 
     private static byte[] hash(byte[] value) {
