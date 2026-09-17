@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 
 @Component
-final class OutlookAccessTokenService {
+final class OutlookAccessTokenService implements OutlookAccessTokenPort {
     private static final int MAX_REFRESH_ROTATION_ATTEMPTS = 2;
     private final OutlookProperties properties;
     private final OutlookConnectionStore connections;
@@ -23,7 +23,8 @@ final class OutlookAccessTokenService {
         this.observability = observability;
     }
 
-    synchronized OutlookAccessTokenPort.AccessToken accessToken() {
+    @Override
+    public synchronized OutlookAccessTokenPort.AccessToken accessToken() {
         var cached = cachedAccessToken;
         if (cached != null && cached.expiresAt().isAfter(Instant.now().plusSeconds(60))) return cached;
         for (var attempt = 0; attempt < MAX_REFRESH_ROTATION_ATTEMPTS; attempt++) {

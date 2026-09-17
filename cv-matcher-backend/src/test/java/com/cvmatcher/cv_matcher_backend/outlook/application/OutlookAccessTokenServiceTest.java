@@ -86,7 +86,7 @@ class OutlookAccessTokenServiceTest {
 
     private static OutlookProperties properties() {
         return new OutlookProperties(null, null, null, null, null, null, null, 1,
-                Duration.ofSeconds(1), Duration.ofSeconds(1), 3);
+                Duration.ofSeconds(1), Duration.ofSeconds(1), 3, "http://localhost");
     }
 
     private static OutlookOAuthClient.TokenResponse token(String accessToken, String refreshToken) {

@@ -1,5 +1,6 @@
 package com.cvmatcher.cv_matcher_backend;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.cvmatcher.cv_matcher_backend.identity.application.JwtService;
 import com.cvmatcher.cv_matcher_backend.outlook.application.OutlookAccessTokenPort;
 import com.cvmatcher.cv_matcher_backend.outlook.application.OutlookException;
@@ -18,6 +19,8 @@ import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.util.UriUtils;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -51,6 +54,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestcontainersConfiguration.class)
 class OutlookIntegrationTest {
     private static final KeyPair OIDC_KEY_PAIR = oidcKeyPair();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final ExecutorService OAUTH_EXECUTOR = Executors.newCachedThreadPool();
     private static final HttpServer OAUTH_DOUBLE = startOAuthDouble();
     private static final AtomicInteger TOKEN_REQUESTS = new AtomicInteger();
@@ -123,6 +127,19 @@ class OutlookIntegrationTest {
         jdbc.update("update outlook_authorization_attempt set expires_at=?", Timestamp.from(Instant.now().minusSeconds(1)));
         mockMvc.perform(get("/api/v1/admin/integrations/outlook/callback").param("state", expired).param("code", "test-code"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("OAUTH_STATE_INVALID"));
+    }
+
+    @Test
+    void authorizationRequestsTheInboxDiscoveryScope() throws Exception {
+        var response = mockMvc.perform(post("/api/v1/admin/integrations/outlook/authorization")
+                        .header("Authorization", adminBearer("outlook-scope@example.test"))
+                        .contentType("application/json").content("{}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        assertEquals("openid profile offline_access Mail.ReadBasic",
+                UriUtils.decode(UriComponentsBuilder
+                        .fromUriString(OBJECT_MAPPER.readTree(response).get("authorizationUrl").asText())
+                        .build().getQueryParams().getFirst("scope"), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -569,7 +586,7 @@ class OutlookIntegrationTest {
     }
 
     private static String tokenBody(String refreshToken, String idToken) {
-        return "{\"access_token\":\"access-token\",\"expires_in\":3600,\"refresh_token\":\"" + refreshToken + "\",\"id_token\":\"" + idToken + "\",\"scope\":\"openid profile offline_access\"}";
+        return "{\"access_token\":\"access-token\",\"expires_in\":3600,\"refresh_token\":\"" + refreshToken + "\",\"id_token\":\"" + idToken + "\",\"scope\":\"openid profile offline_access Mail.ReadBasic\"}";
     }
 
     private static void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String response, String retryAfter) throws IOException {

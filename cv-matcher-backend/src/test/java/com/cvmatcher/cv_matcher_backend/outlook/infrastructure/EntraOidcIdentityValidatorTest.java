@@ -59,7 +59,7 @@ class EntraOidcIdentityValidatorTest {
     }
 
     private static EntraOidcIdentityValidator validator(DoubleServer server, Duration timeout) {
-        return new EntraOidcIdentityValidator(new OutlookProperties("tenant", "client", "secret", server.authority(), "http://localhost/callback", "http://localhost", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", 1, timeout, timeout, 1));
+        return new EntraOidcIdentityValidator(new OutlookProperties("tenant", "client", "secret", server.authority(), "http://localhost/callback", "http://localhost", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", 1, timeout, timeout, 1, "https://graph.microsoft.com"));
     }
 
     private static DoubleServer server(DiscoveryHandler handler) throws IOException {

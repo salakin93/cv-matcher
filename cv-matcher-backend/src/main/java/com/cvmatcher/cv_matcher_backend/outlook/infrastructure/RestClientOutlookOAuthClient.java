@@ -18,7 +18,7 @@ import java.time.format.DateTimeFormatter;
 final class RestClientOutlookOAuthClient implements OutlookOAuthClient {
     private static final String AUTHORIZATION_PATH = "/oauth2/v2.0/authorize";
     private static final String TOKEN_PATH = "/oauth2/v2.0/token";
-    private static final String SCOPES = "openid profile offline_access";
+    private static final String SCOPES = "openid profile offline_access Mail.ReadBasic";
     private final RestClient client;
     private final OutlookProperties properties;
 

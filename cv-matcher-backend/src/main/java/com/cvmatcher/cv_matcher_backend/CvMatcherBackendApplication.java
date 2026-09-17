@@ -3,12 +3,15 @@ package com.cvmatcher.cv_matcher_backend;
 import com.cvmatcher.cv_matcher_backend.identity.CorsProperties;
 import com.cvmatcher.cv_matcher_backend.identity.SecurityProperties;
 import com.cvmatcher.cv_matcher_backend.outlook.OutlookProperties;
+import com.cvmatcher.cv_matcher_backend.job.JobDiscoveryProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
-@EnableConfigurationProperties({SecurityProperties.class, CorsProperties.class, OutlookProperties.class})
+@EnableScheduling
+@EnableConfigurationProperties({SecurityProperties.class, CorsProperties.class, OutlookProperties.class, JobDiscoveryProperties.class})
 public class CvMatcherBackendApplication {
 
     public static void main(String[] args) {

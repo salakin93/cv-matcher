@@ -62,7 +62,7 @@ analiza documentos.
 
 ## Modelo y persistencia
 
-Crear exclusivamente `V7__outlook_inbox_discovery.sql`; no modificar V1–V6.
+Crear exclusivamente `V9__outlook_inbox_discovery.sql`; no modificar V1–V8.
 
 ### `matching_job_discovered_message`
 
@@ -189,8 +189,22 @@ Métricas sin PII:
 - Replay, reinicio y nextLink repetido no duplican filas ni contadores.
 - Cero mensajes, límite alcanzado, `429`, 5xx, token revocado y cancelación
   producen el estado/código correcto sin transacción larga.
-- Acceso API de job conserva `401`/`403`, detalle seguro, OpenAPI y V7 desde
-  V1–V6; regresión `./gradlew test` y `git diff --check`.
+- Acceso API de job conserva `401`/`403`, detalle seguro, OpenAPI y V9 desde
+  V1–V8 y `git diff --check`.
+
+## Cierre priorizado
+
+El cierre de desarrollo de este incremento requiere evidencia focalizada de los
+criterios de aceptación de discovery, no la resolución de toda deuda de
+regresión histórica fuera de su alcance. Como mínimo se deben validar la
+migración V9, el worker/persistencia con Testcontainers, el cliente Graph y la
+autorización OAuth que solicita `Mail.ReadBasic`, además de `git diff --check`.
+
+La suite completa sigue ejecutándose como señal de regresión. Un fallo puede
+registrarse y diferirse sólo si está fuera de 006 y no afecta el contrato OAuth
+usado por discovery, la conexión Graph, migración V9, estados del job,
+persistencia, autorización, privacidad o seguridad. Los fallos dentro de esas
+áreas son bloqueantes y se corrigen antes de la revisión técnica.
 
 ## Criterios de aceptación
 
@@ -213,9 +227,11 @@ Métricas sin PII:
    no exponen identificadores Graph ni metadatos de correo.
 10. Auditoría, métricas, OpenAPI y logs no incluyen PII, secretos, tokens, URLs
     completas ni UUID como etiquetas de métrica.
-11. V7 y pruebas Testcontainers/dobles Graph cubren concurrencia, rango UTC,
+11. V9 y pruebas Testcontainers/dobles Graph cubren concurrencia, rango UTC,
     paginación, idempotencia y errores sin descargar documentos ni habilitar
-    candidatos, Claude, ranking, notificaciones, exportaciones o UI.
+    candidatos, Claude, ranking, notificaciones, exportaciones o UI. La suite
+    completa se reporta como evidencia; sólo los fallos que impacten 006 son
+    bloqueantes conforme a "Cierre priorizado".
 
 ## Riesgos y dependencias
 

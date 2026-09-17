@@ -52,6 +52,17 @@ app:
     connect-timeout: ${MICROSOFT_CONNECT_TIMEOUT:5s}
     read-timeout: ${MICROSOFT_READ_TIMEOUT:10s}
     max-retries: ${MICROSOFT_MAX_RETRIES:3}
+    graph-base-uri: ${MICROSOFT_GRAPH_BASE_URI:https://graph.microsoft.com}
+  job:
+    discovery:
+      enabled: ${JOB_DISCOVERY_ENABLED:false}
+      poll-delay: ${JOB_DISCOVERY_POLL_DELAY:30s}
+      lease-duration: ${JOB_DISCOVERY_LEASE_DURATION:5m}
+      connect-timeout: ${MICROSOFT_CONNECT_TIMEOUT:5s}
+      read-timeout: ${MICROSOFT_READ_TIMEOUT:10s}
+      max-retries: ${MICROSOFT_MAX_RETRIES:3}
+      page-size: ${JOB_DISCOVERY_PAGE_SIZE:50}
+      max-messages-per-job: ${JOB_DISCOVERY_MAX_MESSAGES_PER_JOB:5000}
   security:
     jwt-signing-key: ${JWT_SIGNING_KEY}
     access-token-minutes: ${ACCESS_TOKEN_MINUTES:15}

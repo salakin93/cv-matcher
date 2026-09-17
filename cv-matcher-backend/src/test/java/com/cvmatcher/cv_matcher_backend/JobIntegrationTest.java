@@ -4,6 +4,10 @@ import com.cvmatcher.cv_matcher_backend.identity.application.JwtService;
 import com.cvmatcher.cv_matcher_backend.job.application.JobException;
 import com.cvmatcher.cv_matcher_backend.job.application.JobService;
 import com.cvmatcher.cv_matcher_backend.job.application.MatchingJobWorkerPort;
+import com.cvmatcher.cv_matcher_backend.job.application.OutlookInboxDiscoveryWorker;
+import com.cvmatcher.cv_matcher_backend.job.JobDiscoveryProperties;
+import com.cvmatcher.cv_matcher_backend.outlook.application.InboxDiscoveryPort;
+import com.cvmatcher.cv_matcher_backend.outlook.application.InboxDiscoveryException;
 import com.cvmatcher.cv_matcher_backend.vacancy.application.VacancyService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
@@ -25,6 +29,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -57,7 +62,9 @@ class JobIntegrationTest {
         for (var userId : createdUsers) {
             var vacancyIds = jdbc.query("select target_id from audit_event where actor_user_id=? and target_type='VACANCY' and target_id is not null",
                     (rs, ignored) -> UUID.fromString(rs.getString("target_id")), userId);
+            jdbc.update("delete from matching_job_discovered_message where matching_job_id in (select id from matching_job where requested_by_user_id=?)", userId);
             jdbc.update("delete from matching_job_event where matching_job_id in (select id from matching_job where requested_by_user_id=?)", userId);
+            jdbc.update("delete from matching_job_discovered_message where matching_job_id in (select id from matching_job where requested_by_user_id=?)", userId);
             jdbc.update("delete from matching_job_requirement where matching_job_id in (select id from matching_job where requested_by_user_id=?)", userId);
             jdbc.update("delete from matching_job where requested_by_user_id=?", userId);
             for (var vacancyId : vacancyIds) {
@@ -225,9 +232,222 @@ class JobIntegrationTest {
         assertTrue(worker.finishClaimed(accepted.jobId(), "worker-c", JobService.Status.FAILED, "SAFE_FAILURE"));
         assertTrue(!worker.finishClaimed(accepted.jobId(), "worker-c", JobService.Status.FAILED, "SAFE_FAILURE"));
         assertEquals("FAILED", jdbc.queryForObject("select status from matching_job where id=?", String.class, accepted.jobId()));
-        assertEquals("QUEUED", jdbc.queryForObject("select from_status from matching_job_event where matching_job_id=? and action='CLAIMED' order by created_at asc,id asc limit 1", String.class, accepted.jobId()));
+        assertEquals("QUEUED", jdbc.queryForObject("select from_status from matching_job_event where matching_job_id=? and action='DISCOVERY_STARTED' order by created_at asc,id asc limit 1", String.class, accepted.jobId()));
         assertEquals("ANALYZING", jdbc.queryForObject("select from_status from matching_job_event where matching_job_id=? and action='TERMINATED'", String.class, accepted.jobId()));
         assertEquals(1L, jdbc.queryForObject("select count(*) from matching_job_event where matching_job_id=? and action='TERMINATED'", Long.class, accepted.jobId()));
+    }
+
+    @Test
+    void discoversOnlyMinimalInboxMetadataIdempotentlyAndAdvancesToDocumentIngestion() {
+        var actor = insertUser("discovery@example.test", "RECRUITER");
+        var vacancy = vacancies.create(actor, command(0));
+        var jobId = jobs.enqueue(actor, vacancy.id()).jobId();
+        InboxDiscoveryPort inbox = (from, to, next, pageSize) -> new InboxDiscoveryPort.Page(List.of(
+                new InboxDiscoveryPort.Message("immutable-message-1", from, true),
+                new InboxDiscoveryPort.Message("immutable-message-1", from.plusSeconds(1), true),
+                new InboxDiscoveryPort.Message("outside-range", to, false)), null);
+        var worker = new OutlookInboxDiscoveryWorker(jobs, inbox,
+                new JobDiscoveryProperties(true, Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, 50, 5000), metrics);
+
+        worker.discoverNextJob();
+
+        assertEquals("INGESTING_DOCUMENTS", jdbc.queryForObject("select status from matching_job where id=?", String.class, jobId));
+        assertEquals(1L, jdbc.queryForObject("select count(*) from matching_job_discovered_message where matching_job_id=?", Long.class, jobId));
+        assertEquals(1, jobs.get(jobId).discoveredMessageCount());
+        assertTrue(jobs.get(jobId).discoveryCompletedAt() != null);
+        assertEquals(1L, jdbc.queryForObject("select count(*) from matching_job_event where matching_job_id=? and action='DISCOVERY_COMPLETED' and correlation_id is not null", Long.class, jobId));
+        assertEquals(1L, jdbc.queryForObject("select count(*) from audit_event where action='OUTLOOK_DISCOVERY_COMPLETED' and target_id=? and correlation_id is not null", Long.class, jobId));
+    }
+
+    @Test
+    void zeroMessagesCompletesDiscoveryWithZeroCount() {
+        var actor = insertUser("discovery-empty@example.test", "RECRUITER");
+        var vacancy = vacancies.create(actor, command(0));
+        var jobId = jobs.enqueue(actor, vacancy.id()).jobId();
+        InboxDiscoveryPort inbox = (from, to, next, pageSize) -> new InboxDiscoveryPort.Page(List.of(), null);
+        var discovery = new OutlookInboxDiscoveryWorker(jobs, inbox,
+                new JobDiscoveryProperties(true, Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, 50, 5000), metrics);
+
+        discovery.discoverNextJob();
+
+        assertEquals("INGESTING_DOCUMENTS", jobs.get(jobId).status().name());
+        assertEquals(0, jobs.get(jobId).discoveredMessageCount());
+        assertTrue(jobs.get(jobId).discoveryCompletedAt() != null);
+    }
+
+    @Test
+    void messageLimitCompletesWithWarningWithoutAnotherGraphRequest() {
+        var actor = insertUser("discovery-limit@example.test", "RECRUITER");
+        var vacancy = vacancies.create(actor, command(0));
+        var jobId = jobs.enqueue(actor, vacancy.id()).jobId();
+        var requests = new AtomicInteger();
+        InboxDiscoveryPort inbox = (from, to, next, pageSize) -> {
+            requests.incrementAndGet();
+            return new InboxDiscoveryPort.Page(List.of(
+                    new InboxDiscoveryPort.Message("immutable-message-1", from, true),
+                    new InboxDiscoveryPort.Message("immutable-message-2", from.plusSeconds(1), true)), "next-page");
+        };
+        var discovery = new OutlookInboxDiscoveryWorker(jobs, inbox,
+                new JobDiscoveryProperties(true, Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, 50, 1), metrics);
+
+        discovery.discoverNextJob();
+
+        assertEquals(1, requests.get());
+        assertEquals("INGESTING_DOCUMENTS", jobs.get(jobId).status().name());
+        assertEquals("MESSAGE_LIMIT_REACHED", jobs.get(jobId).failureCode());
+        assertEquals(1, jobs.get(jobId).discoveredMessageCount());
+    }
+
+    @Test
+    void discoversPagedMessagesWithoutDuplicatingPersistedMetadataOrCounts() {
+        var actor = insertUser("discovery-pages@example.test", "RECRUITER");
+        var vacancy = vacancies.create(actor, command(0));
+        var jobId = jobs.enqueue(actor, vacancy.id()).jobId();
+        InboxDiscoveryPort inbox = (from, to, next, pageSize) -> next == null
+                ? new InboxDiscoveryPort.Page(List.of(new InboxDiscoveryPort.Message("immutable-message-1", from, true)), "page-2")
+                : new InboxDiscoveryPort.Page(List.of(
+                new InboxDiscoveryPort.Message("immutable-message-1", from, true),
+                new InboxDiscoveryPort.Message("immutable-message-2", from.plusSeconds(1), false)), null);
+        var worker = new OutlookInboxDiscoveryWorker(jobs, inbox,
+                new JobDiscoveryProperties(true, Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, 50, 5000), metrics);
+
+        worker.discoverNextJob();
+
+        assertEquals("INGESTING_DOCUMENTS", jdbc.queryForObject("select status from matching_job where id=?", String.class, jobId));
+        assertEquals(2L, jdbc.queryForObject("select count(*) from matching_job_discovered_message where matching_job_id=?", Long.class, jobId));
+        assertEquals(2, jobs.get(jobId).discoveredMessageCount());
+        assertEquals(2L, jdbc.queryForObject("select count(*) from matching_job_event where matching_job_id=? and action='DISCOVERY_PAGE_SAVED'", Long.class, jobId));
+    }
+
+    @Test
+    void replayAfterAnExpiredLeaseDoesNotDuplicateDiscoveryMetadataOrCounters() {
+        var actor = insertUser("discovery-replay@example.test", "RECRUITER");
+        var vacancy = vacancies.create(actor, command(0));
+        var jobId = jobs.enqueue(actor, vacancy.id()).jobId();
+        InboxDiscoveryPort inbox = (from, to, next, pageSize) -> new InboxDiscoveryPort.Page(List.of(
+                new InboxDiscoveryPort.Message("immutable-message-1", from, true)), null);
+        var discovery = new OutlookInboxDiscoveryWorker(jobs, inbox,
+                new JobDiscoveryProperties(true, Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, 50, 5000), metrics);
+
+        discovery.discoverNextJob();
+        jdbc.update("update matching_job set status='DISCOVERING',claimed_by='stale-worker',lease_until=?,finished_at=null where id=?", Timestamp.from(Instant.now().minusSeconds(1)), jobId);
+        discovery.discoverNextJob();
+
+        assertEquals(1L, jdbc.queryForObject("select count(*) from matching_job_discovered_message where matching_job_id=?", Long.class, jobId));
+        assertEquals(1, jobs.get(jobId).discoveredMessageCount());
+    }
+
+    @Test
+    void repeatedNextLinkFailsDiscoveryWithoutDuplicatingMessagesOrCounters() {
+        var actor = insertUser("discovery-repeated-link@example.test", "RECRUITER");
+        var vacancy = vacancies.create(actor, command(0));
+        var jobId = jobs.enqueue(actor, vacancy.id()).jobId();
+        var requests = new AtomicInteger();
+        InboxDiscoveryPort inbox = (from, to, next, pageSize) -> {
+            requests.incrementAndGet();
+            return new InboxDiscoveryPort.Page(List.of(new InboxDiscoveryPort.Message("immutable-message-1", from, true)), "repeated-link");
+        };
+        var discovery = new OutlookInboxDiscoveryWorker(jobs, inbox,
+                new JobDiscoveryProperties(true, Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, 50, 5000), metrics);
+
+        discovery.discoverNextJob();
+
+        assertEquals(2, requests.get());
+        assertEquals("FAILED", jobs.get(jobId).status().name());
+        assertEquals("OUTLOOK_DISCOVERY_PROTOCOL_ERROR", jobs.get(jobId).failureCode());
+        assertEquals(1, jobs.get(jobId).discoveredMessageCount());
+    }
+
+    @Test
+    void reauthorizationFailureStopsDiscoveryWithoutPersistingMessages() {
+        var actor = insertUser("discovery-reauth@example.test", "RECRUITER");
+        var vacancy = vacancies.create(actor, command(0));
+        var jobId = jobs.enqueue(actor, vacancy.id()).jobId();
+        InboxDiscoveryPort inbox = (from, to, next, pageSize) -> {
+            throw new InboxDiscoveryException(InboxDiscoveryException.Kind.REAUTHORIZATION_REQUIRED);
+        };
+        var discovery = new OutlookInboxDiscoveryWorker(jobs, inbox,
+                new JobDiscoveryProperties(true, Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, 50, 5000), metrics);
+
+        discovery.discoverNextJob();
+
+        assertEquals("REAUTHORIZATION_REQUIRED", jobs.get(jobId).status().name());
+        assertEquals("OUTLOOK_REAUTH_REQUIRED", jobs.get(jobId).failureCode());
+        assertEquals(0, jobs.get(jobId).discoveredMessageCount());
+    }
+
+    @Test
+    void cancelledJobWithAPersistedPageIsNotRequestedAgain() {
+        var actor = insertUser("discovery-cancelled-page@example.test", "RECRUITER");
+        var vacancy = vacancies.create(actor, command(0));
+        var jobId = jobs.enqueue(actor, vacancy.id()).jobId();
+        var claim = jobs.claimNextDiscovery("test-worker", Duration.ofMinutes(1)).orElseThrow();
+        assertTrue(jobs.saveDiscoveredPage(jobId, "test-worker", List.of(new JobService.DiscoveredMessage("immutable-message-1", claim.receivedFromUtc(), true))));
+        jobs.cancel(actor, jobId);
+        var requests = new AtomicInteger();
+        InboxDiscoveryPort inbox = (from, to, next, pageSize) -> {
+            requests.incrementAndGet();
+            return new InboxDiscoveryPort.Page(List.of(), null);
+        };
+        var discovery = new OutlookInboxDiscoveryWorker(jobs, inbox,
+                new JobDiscoveryProperties(true, Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, 50, 5000), metrics);
+
+        discovery.discoverNextJob();
+
+        assertEquals(0, requests.get());
+        assertEquals("CANCELLED", jobs.get(jobId).status().name());
+        assertEquals(1, jobs.get(jobId).discoveredMessageCount());
+    }
+
+    @Test
+    void cancellationAfterFirstSavedPagePreventsTheSecondGraphRequest() {
+        var actor = insertUser("discovery-cancel-between-pages@example.test", "RECRUITER");
+        var vacancy = vacancies.create(actor, command(0));
+        var jobId = jobs.enqueue(actor, vacancy.id()).jobId();
+        var requests = new AtomicInteger();
+        InboxDiscoveryPort inbox = new InboxDiscoveryPort() {
+            @Override
+            public Page listInboxMessages(Instant from, Instant to, String next, int pageSize) {
+                requests.incrementAndGet();
+                return new Page(List.of(new Message("immutable-message-1", from, true)), "second-page");
+            }
+
+            @Override
+            public Page listInboxMessages(Instant from, Instant to, String next, int pageSize, Runnable beforeRequest) {
+                if (next != null) jobs.cancel(actor, jobId);
+                beforeRequest.run();
+                return listInboxMessages(from, to, next, pageSize);
+            }
+        };
+        var discovery = new OutlookInboxDiscoveryWorker(jobs, inbox,
+                new JobDiscoveryProperties(true, Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, 50, 5000), metrics);
+
+        discovery.discoverNextJob();
+
+        assertEquals(1, requests.get());
+        assertEquals("CANCELLED", jobs.get(jobId).status().name());
+        assertEquals(1, jobs.get(jobId).discoveredMessageCount());
+    }
+
+    @Test
+    void cancellationDuringDiscoveryPreventsTheNextGraphPageRequest() {
+        var actor = insertUser("discovery-cancel@example.test", "RECRUITER");
+        var vacancy = vacancies.create(actor, command(0));
+        var jobId = jobs.enqueue(actor, vacancy.id()).jobId();
+        var requests = new AtomicInteger();
+        InboxDiscoveryPort inbox = (from, to, next, pageSize) -> {
+            requests.incrementAndGet();
+            jobs.cancel(actor, jobId);
+            return new InboxDiscoveryPort.Page(List.of(new InboxDiscoveryPort.Message("immutable-message-1", from, true)), "page-2");
+        };
+        var discovery = new OutlookInboxDiscoveryWorker(jobs, inbox,
+                new JobDiscoveryProperties(true, Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofSeconds(1), Duration.ofSeconds(1), 3, 50, 5000), metrics);
+
+        discovery.discoverNextJob();
+
+        assertEquals(1, requests.get());
+        assertEquals("CANCELLED", jdbc.queryForObject("select status from matching_job where id=?", String.class, jobId));
+        assertEquals(0L, jdbc.queryForObject("select count(*) from matching_job_discovered_message where matching_job_id=?", Long.class, jobId));
     }
 
     private boolean attemptEnqueue(UUID actor, UUID vacancyId, CountDownLatch ready, CountDownLatch start) throws Exception {

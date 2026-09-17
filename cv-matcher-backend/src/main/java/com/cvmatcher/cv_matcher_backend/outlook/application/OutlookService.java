@@ -16,9 +16,9 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-public class OutlookService implements OutlookAccessTokenPort {
+public class OutlookService {
     private static final Logger log = LoggerFactory.getLogger(OutlookService.class);
-    private static final List<String> REQUIRED_SCOPES = List.of("openid", "profile", "offline_access");
+    private static final List<String> REQUIRED_SCOPES = List.of("openid", "profile", "offline_access", "Mail.ReadBasic");
     private final OutlookProperties properties;
     private final OutlookAuthorizationAttempts attempts;
     private final OutlookConnectionStore connections;
@@ -94,11 +94,6 @@ public class OutlookService implements OutlookAccessTokenPort {
             logFailure("OUTLOOK_AUTHORIZATION_FAILED");
             return redirect("error");
         }
-    }
-
-    @Override
-    public AccessToken accessToken() {
-        return accessTokens.accessToken();
     }
 
     private void configured() {

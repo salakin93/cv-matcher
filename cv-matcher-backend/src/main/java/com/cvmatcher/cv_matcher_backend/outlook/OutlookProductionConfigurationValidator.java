@@ -24,7 +24,8 @@ final class OutlookProductionConfigurationValidator implements SmartInitializing
                 || !microsoftAuthority(properties.authority()) || !httpsUrl(properties.redirectUri()) || !httpsUrl(properties.appBaseUrl())
                 || properties.tokenEncryptionKeyVersion() <= 0 || properties.connectTimeout() == null || properties.connectTimeout().isNegative() || properties.connectTimeout().isZero()
                 || properties.readTimeout() == null || properties.readTimeout().isNegative() || properties.readTimeout().isZero()
-                || properties.maxRetries() < 1 || properties.maxRetries() > 3 || !validAes256Key(properties.tokenEncryptionKey())) {
+                || properties.maxRetries() < 1 || properties.maxRetries() > 3 || !validAes256Key(properties.tokenEncryptionKey())
+                || !allowedGraphBaseUri(properties.graphBaseUri())) {
             throw new IllegalStateException("Invalid production Outlook configuration");
         }
     }
@@ -42,6 +43,17 @@ final class OutlookProductionConfigurationValidator implements SmartInitializing
         try {
             var uri = URI.create(value);
             return "https".equals(uri.getScheme()) && uri.getHost() != null && uri.getQuery() == null && uri.getFragment() == null && uri.getUserInfo() == null;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private static boolean allowedGraphBaseUri(String value) {
+        try {
+            var uri = URI.create(value);
+            return "https".equals(uri.getScheme()) && "graph.microsoft.com".equals(uri.getHost())
+                    && uri.getPort() == -1 && (uri.getPath() == null || uri.getPath().isEmpty() || "/".equals(uri.getPath()))
+                    && uri.getQuery() == null && uri.getFragment() == null && uri.getUserInfo() == null;
         } catch (IllegalArgumentException exception) {
             return false;
         }

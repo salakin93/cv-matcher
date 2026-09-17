@@ -95,7 +95,7 @@ public class JobService implements MatchingJobWorkerPort {
         var job = find(jobId);
         var requirements = jdbc.query("select description,weight,mandatory,position from matching_job_requirement where matching_job_id=? order by position asc",
                 (rs, ignored) -> new RequirementSnapshot(rs.getString("description"), rs.getInt("weight"), rs.getBoolean("mandatory"), rs.getInt("position")), jobId);
-        return new JobDetail(job.id(), job.vacancyId(), job.vacancyVersion(), job.vacancyTitle(), job.receivedFromUtc(), job.receivedToUtcExclusive(), job.status(), job.attempt(), job.failureCode(), job.createdAt(), job.startedAt(), job.finishedAt(), job.updatedAt(), requirements);
+        return new JobDetail(job.id(), job.vacancyId(), job.vacancyVersion(), job.vacancyTitle(), job.receivedFromUtc(), job.receivedToUtcExclusive(), job.status(), job.attempt(), job.failureCode(), job.discoveredMessageCount(), job.discoveryCompletedAt(), job.createdAt(), job.startedAt(), job.finishedAt(), job.updatedAt(), requirements);
     }
 
     @Transactional
@@ -144,20 +144,34 @@ public class JobService implements MatchingJobWorkerPort {
     @Override
     @Transactional
     public Optional<ClaimedJob> claimNext(String workerId, Duration leaseDuration) {
+        return claimNext(workerId, leaseDuration, "status='QUEUED' or (status in ('DISCOVERING','INGESTING_DOCUMENTS','ANALYZING') and lease_until < ?)");
+    }
+
+    @Transactional
+    public Optional<ClaimedJob> claimNextDiscovery(String workerId, Duration leaseDuration) {
+        return claimNext(workerId, leaseDuration, "status='QUEUED' or (status='DISCOVERING' and lease_until < ?)");
+    }
+
+    private Optional<ClaimedJob> claimNext(String workerId, Duration leaseDuration, String eligible) {
         var now = Instant.now();
-        var candidate = jdbc.query("select id,status from matching_job where status='QUEUED' or (status in ('DISCOVERING','INGESTING_DOCUMENTS','ANALYZING') and lease_until < ?) order by created_at asc for update skip locked limit 1",
-                rs -> rs.next() ? new ClaimCandidate(UUID.fromString(rs.getString("id")), Status.valueOf(rs.getString("status"))) : null, timestamp(now));
+        var candidate = jdbc.query("select id,status,received_from_utc,received_to_utc_exclusive from matching_job where " + eligible + " order by created_at asc for update skip locked limit 1",
+                rs -> rs.next() ? new ClaimCandidate(UUID.fromString(rs.getString("id")), Status.valueOf(rs.getString("status")), rs.getTimestamp("received_from_utc").toInstant(), rs.getTimestamp("received_to_utc_exclusive").toInstant()) : null, timestamp(now));
         if (candidate == null) return Optional.empty();
         var leaseUntil = now.plus(leaseDuration);
         jdbc.update("update matching_job set status='DISCOVERING',claimed_by=?,lease_until=?,started_at=coalesce(started_at,?),updated_at=? where id=?", workerId, timestamp(leaseUntil), timestamp(now), timestamp(now), candidate.jobId());
-        event(candidate.jobId(), null, "CLAIMED", candidate.status(), Status.DISCOVERING);
-        return Optional.of(new ClaimedJob(candidate.jobId(), leaseUntil));
+        event(candidate.jobId(), null, "DISCOVERY_STARTED", candidate.status(), Status.DISCOVERING);
+        return Optional.of(new ClaimedJob(candidate.jobId(), candidate.fromUtc(), candidate.toUtcExclusive(), leaseUntil));
     }
 
     @Override
     @Transactional
     public boolean renewLease(UUID jobId, String workerId, Duration leaseDuration) {
         return jdbc.update("update matching_job set lease_until=?,updated_at=? where id=? and claimed_by=? and lease_until>=? and status in ('DISCOVERING','INGESTING_DOCUMENTS','ANALYZING')", timestamp(Instant.now().plus(leaseDuration)), timestamp(Instant.now()), jobId, workerId, timestamp(Instant.now())) == 1;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isCancelled(UUID jobId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("select status='CANCELLED' from matching_job where id=?", Boolean.class, jobId));
     }
 
     @Override
@@ -188,18 +202,48 @@ public class JobService implements MatchingJobWorkerPort {
         return updated == 1;
     }
 
+    @Transactional
+    public boolean saveDiscoveredPage(UUID jobId, String workerId, List<DiscoveredMessage> messages) {
+        var current = jdbc.query("select status from matching_job where id=? and claimed_by=? and lease_until>=? for update", rs -> rs.next() ? Status.valueOf(rs.getString(1)) : null, jobId, workerId, timestamp(Instant.now()));
+        if (current != Status.DISCOVERING) return false;
+        for (var message : messages) jdbc.update("insert into matching_job_discovered_message(id,matching_job_id,graph_message_id,received_at,has_attachments,created_at) values(?,?,?,?,?,?) on conflict (matching_job_id,graph_message_id) do nothing", UUID.randomUUID(), jobId, message.graphMessageId(), timestamp(message.receivedAt()), message.hasAttachments(), timestamp(Instant.now()));
+        jdbc.update("update matching_job set discovered_message_count=(select count(*) from matching_job_discovered_message where matching_job_id=?),updated_at=? where id=?", jobId, timestamp(Instant.now()), jobId);
+        event(jobId, null, "DISCOVERY_PAGE_SAVED", Status.DISCOVERING, Status.DISCOVERING);
+        return true;
+    }
+
+    @Transactional
+    public boolean completeDiscovery(UUID jobId, String workerId, String warningCode) {
+        var now = Instant.now();
+        var current = jdbc.query("select status from matching_job where id=? and claimed_by=? and lease_until>=? for update", rs -> rs.next() ? Status.valueOf(rs.getString(1)) : null, jobId, workerId, timestamp(now));
+        if (current != Status.DISCOVERING) return false;
+        jdbc.update("update matching_job set status='INGESTING_DOCUMENTS',failure_code=?,discovered_message_count=(select count(*) from matching_job_discovered_message where matching_job_id=?),discovery_completed_at=?,updated_at=?,claimed_by=null,lease_until=null where id=?", warningCode, jobId, timestamp(now), timestamp(now), jobId);
+        event(jobId, null, "DISCOVERY_COMPLETED", Status.DISCOVERING, Status.INGESTING_DOCUMENTS);
+        audit(null, "OUTLOOK_DISCOVERY_COMPLETED", jobId);
+        return true;
+    }
+
+    @Transactional
+    public boolean failDiscovery(UUID jobId, String workerId, Status terminalStatus, String failureCode) {
+        if (terminalStatus != Status.FAILED && terminalStatus != Status.REAUTHORIZATION_REQUIRED) throw new IllegalArgumentException("discovery terminal status required");
+        if (!finishClaimed(jobId, workerId, terminalStatus, failureCode)) return false;
+        event(jobId, null, terminalStatus == Status.FAILED ? "DISCOVERY_FAILED" : "DISCOVERY_REAUTH_REQUIRED", Status.DISCOVERING, terminalStatus);
+        audit(null, "OUTLOOK_DISCOVERY_FAILED", jobId);
+        return true;
+    }
+
     private JobRow locked(UUID jobId) {
-        var result = jdbc.query("select id,vacancy_id,vacancy_version,vacancy_title,received_from_utc,received_to_utc_exclusive,status,attempt,failure_code,created_at,started_at,finished_at,updated_at from matching_job where id=? for update", rs -> rs.next() ? row(rs) : null, jobId);
+        var result = jdbc.query("select id,vacancy_id,vacancy_version,vacancy_title,received_from_utc,received_to_utc_exclusive,status,attempt,failure_code,discovered_message_count,discovery_completed_at,created_at,started_at,finished_at,updated_at from matching_job where id=? for update", rs -> rs.next() ? row(rs) : null, jobId);
         if (result == null) throw new JobException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND");
         return result;
     }
     private JobRow find(UUID jobId) {
-        var result = jdbc.query("select id,vacancy_id,vacancy_version,vacancy_title,received_from_utc,received_to_utc_exclusive,status,attempt,failure_code,created_at,started_at,finished_at,updated_at from matching_job where id=?", rs -> rs.next() ? row(rs) : null, jobId);
+        var result = jdbc.query("select id,vacancy_id,vacancy_version,vacancy_title,received_from_utc,received_to_utc_exclusive,status,attempt,failure_code,discovered_message_count,discovery_completed_at,created_at,started_at,finished_at,updated_at from matching_job where id=?", rs -> rs.next() ? row(rs) : null, jobId);
         if (result == null) throw new JobException(HttpStatus.NOT_FOUND, "JOB_NOT_FOUND");
         return result;
     }
     private static JobRow row(java.sql.ResultSet rs) throws java.sql.SQLException {
-        return new JobRow(UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("vacancy_id")), rs.getLong("vacancy_version"), rs.getString("vacancy_title"), rs.getTimestamp("received_from_utc").toInstant(), rs.getTimestamp("received_to_utc_exclusive").toInstant(), Status.valueOf(rs.getString("status")), rs.getInt("attempt"), rs.getString("failure_code"), rs.getTimestamp("created_at").toInstant(), instant(rs, "started_at"), instant(rs, "finished_at"), rs.getTimestamp("updated_at").toInstant());
+        return new JobRow(UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("vacancy_id")), rs.getLong("vacancy_version"), rs.getString("vacancy_title"), rs.getTimestamp("received_from_utc").toInstant(), rs.getTimestamp("received_to_utc_exclusive").toInstant(), Status.valueOf(rs.getString("status")), rs.getInt("attempt"), rs.getString("failure_code"), rs.getInt("discovered_message_count"), instant(rs, "discovery_completed_at"), rs.getTimestamp("created_at").toInstant(), instant(rs, "started_at"), instant(rs, "finished_at"), rs.getTimestamp("updated_at").toInstant());
     }
     private static JobSummary summary(java.sql.ResultSet rs) throws java.sql.SQLException { return new JobSummary(UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("vacancy_id")), rs.getLong("vacancy_version"), rs.getString("vacancy_title"), Status.valueOf(rs.getString("status")), rs.getInt("attempt"), rs.getString("failure_code"), rs.getTimestamp("created_at").toInstant(), instant(rs, "started_at"), instant(rs, "finished_at"), rs.getTimestamp("updated_at").toInstant()); }
     private static Instant instant(java.sql.ResultSet rs, String column) throws java.sql.SQLException { var value = rs.getTimestamp(column); return value == null ? null : value.toInstant(); }
@@ -208,16 +252,17 @@ public class JobService implements MatchingJobWorkerPort {
     private void mutation(String action, String outcome) { metrics.counter("matching_jobs.mutations", "action", action, "outcome", outcome).increment(); }
     private void queueRequest(String result) { metrics.counter("matching_jobs.queue_requests", "result", result).increment(); }
     private double activeJobCount(Status status) { return jdbc.queryForObject("select count(*) from matching_job where status=?", Long.class, status.name()); }
-    private UUID correlationId() { var attributes = RequestContextHolder.getRequestAttributes(); if (attributes instanceof ServletRequestAttributes request) { var value = request.getRequest().getAttribute(CorrelationIdFilter.ATTRIBUTE); if (value instanceof UUID id) return id; } return null; }
+    private UUID correlationId() { var attributes = RequestContextHolder.getRequestAttributes(); if (attributes instanceof ServletRequestAttributes request) { var value = request.getRequest().getAttribute(CorrelationIdFilter.ATTRIBUTE); if (value instanceof UUID id) return id; } return UUID.randomUUID(); }
     private static Timestamp timestamp(Instant value) { return Timestamp.from(value); }
 
     public enum Status { QUEUED, DISCOVERING, INGESTING_DOCUMENTS, ANALYZING, COMPLETED, COMPLETED_WITH_WARNINGS, FAILED, REAUTHORIZATION_REQUIRED, CANCELLED; public boolean active() { return this == QUEUED || this == DISCOVERING || this == INGESTING_DOCUMENTS || this == ANALYZING; } public boolean terminal() { return !active(); } public boolean canTransitionTo(Status next) { return (this == DISCOVERING && next == INGESTING_DOCUMENTS) || (this == INGESTING_DOCUMENTS && next == ANALYZING); } }
     public record JobAccepted(UUID jobId, Status status, int attempt, String statusUrl) {}
     public record RequirementSnapshot(String description, int weight, boolean mandatory, int position) {}
     public record JobSummary(UUID id, UUID vacancyId, long vacancyVersion, String vacancyTitle, Status status, int attempt, String failureCode, Instant createdAt, Instant startedAt, Instant finishedAt, Instant updatedAt) {}
-    public record JobDetail(UUID id, UUID vacancyId, long vacancyVersion, String vacancyTitle, Instant receivedFromUtc, Instant receivedToUtcExclusive, Status status, int attempt, String failureCode, Instant createdAt, Instant startedAt, Instant finishedAt, Instant updatedAt, List<RequirementSnapshot> requirements) {}
+    public record JobDetail(UUID id, UUID vacancyId, long vacancyVersion, String vacancyTitle, Instant receivedFromUtc, Instant receivedToUtcExclusive, Status status, int attempt, String failureCode, int discoveredMessageCount, Instant discoveryCompletedAt, Instant createdAt, Instant startedAt, Instant finishedAt, Instant updatedAt, List<RequirementSnapshot> requirements) {}
     public record JobPage(List<JobSummary> items, int page, int size, long totalItems, long totalPages) {}
-    public record ClaimedJob(UUID jobId, Instant leaseUntil) {}
-    private record JobRow(UUID id, UUID vacancyId, long vacancyVersion, String vacancyTitle, Instant receivedFromUtc, Instant receivedToUtcExclusive, Status status, int attempt, String failureCode, Instant createdAt, Instant startedAt, Instant finishedAt, Instant updatedAt) {}
-    private record ClaimCandidate(UUID jobId, Status status) {}
+    public record ClaimedJob(UUID jobId, Instant receivedFromUtc, Instant receivedToUtcExclusive, Instant leaseUntil) {}
+    public record DiscoveredMessage(String graphMessageId, Instant receivedAt, boolean hasAttachments) {}
+    private record JobRow(UUID id, UUID vacancyId, long vacancyVersion, String vacancyTitle, Instant receivedFromUtc, Instant receivedToUtcExclusive, Status status, int attempt, String failureCode, int discoveredMessageCount, Instant discoveryCompletedAt, Instant createdAt, Instant startedAt, Instant finishedAt, Instant updatedAt) {}
+    private record ClaimCandidate(UUID jobId, Status status, Instant fromUtc, Instant toUtcExclusive) {}
 }

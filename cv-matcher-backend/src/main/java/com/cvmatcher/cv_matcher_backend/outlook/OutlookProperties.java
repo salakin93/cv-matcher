@@ -8,5 +8,5 @@ import java.time.Duration;
 public record OutlookProperties(String tenantId, String clientId, String clientSecret, String authority,
                                 String redirectUri,
                                 String appBaseUrl, String tokenEncryptionKey, int tokenEncryptionKeyVersion,
-                                Duration connectTimeout, Duration readTimeout, int maxRetries) {
+                                 Duration connectTimeout, Duration readTimeout, int maxRetries, String graphBaseUri) {
 }
