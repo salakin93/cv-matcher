@@ -64,7 +64,7 @@ public class JobController {
     public JobService.JobPage list(@PathVariable UUID vacancyId, @Parameter(in = ParameterIn.QUERY, description = "Filtro exacto de estado") @RequestParam(required = false) JobService.Status status, @Parameter(in = ParameterIn.QUERY, description = "Página desde 0") @RequestParam(defaultValue = "0") @Min(0) int page, @Parameter(in = ParameterIn.QUERY, description = "Elementos por página, de 1 a 100") @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) { return jobs.list(vacancyId, status, page, size); }
 
     @GetMapping("/report-jobs/{jobId}")
-    @Operation(summary = "Consultar un trabajo", description = "Devuelve el snapshot de la vacante y requisitos; nunca expone lease, solicitante, sesiones, tokens ni documentos.")
+    @Operation(summary = "Consultar un trabajo", description = "Devuelve el snapshot de la vacante, requisitos y conteos agregados seguros de documentos; nunca expone lease, solicitante, sesiones, tokens, archivos, hashes o rutas.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Detalle de trabajo", content = @Content(schema = @Schema(implementation = JobService.JobDetail.class))),
             @ApiResponse(responseCode = "401", description = "Bearer inválido o sesión revocada", content = @Content(schema = @Schema(implementation = ApiError.class))),

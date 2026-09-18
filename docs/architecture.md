@@ -133,6 +133,10 @@ Estados mínimos: `QUEUED`, `DISCOVERING`, `INGESTING_DOCUMENTS`, `ANALYZING`, `
 - Una sola conexión Outlook compartida, administrada por `ADMIN`.
 - OAuth 2.0 Authorization Code + PKCE en backend confidencial, con callback backend, `offline_access`, y refresh token cifrado en DB. El refresh token rotado se reemplaza atómicamente y nunca llega al navegador.
 - La conexión OAuth inicial solicita sólo `openid`, `profile` y `offline_access`; valida el `id_token` mediante OIDC discovery/JWKS sin llamar Microsoft Graph. El permiso de Inbox no se solicita hasta una spec aprobada de descubrimiento; esa spec debe justificar y validar el permiso mínimo exacto antes de listar mensajes. [Microsoft Graph: listar mensajes](https://learn.microsoft.com/en-us/graph/api/mailfolder-list-messages?view=graph-rest-1.0)
+- El descubrimiento solicita `Mail.ReadBasic`. La descarga de adjuntos de mensajes
+  requiere `Mail.Read`; se incorpora sólo en la spec de ingesta documental y
+  exige reautorización explícita por un administrador. Workers no elevan scopes
+  ni reintentan una conexión sin consentimiento.
 - Se consulta sólo Inbox, por rango UTC inclusivo, paginado, con campos mínimos y el header `Prefer: IdType="ImmutableId"` en cada petición relevante. Microsoft exige el header en cada solicitud para usar IDs inmutables de forma consistente. [IDs inmutables de Outlook](https://learn.microsoft.com/en-us/graph/outlook-immutable-id)
 - Timeouts explícitos, máximo tres reintentos para errores transitorios, respeto de `429 Retry-After`, límites de mensajes, adjuntos y bytes definidos por spec.
 - La expiración, revocación o falta de consentimiento exige reconexión por administrador. Los refresh tokens deben protegerse y el anterior debe descartarse al obtener uno nuevo. [Refresh tokens de Microsoft](https://learn.microsoft.com/en-us/entra/identity-platform/refresh-tokens)

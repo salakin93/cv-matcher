@@ -4,7 +4,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 final class OutlookInboxAuthorizationService implements OutlookInboxAuthorizationPort {
-    private static final String INBOX_SCOPE = "Mail.ReadBasic";
+    private static final String INBOX_SCOPE = "Mail.Read";
     private final OutlookConnectionStore connections;
 
     OutlookInboxAuthorizationService(OutlookConnectionStore connections) {

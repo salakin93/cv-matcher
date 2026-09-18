@@ -23,6 +23,28 @@ class OutlookProductionConfigurationValidatorTest {
         }
     }
 
+    @Test
+    void rejectsANonpositiveRetryAfterMaximum() {
+        var environment = mock(Environment.class);
+        when(environment.matchesProfiles("prod")).thenReturn(true);
+        var properties = new OutlookProperties("tenant", "client", "secret", "https://login.microsoftonline.com",
+                "https://app.example.test/callback", "https://app.example.test", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", 1,
+                Duration.ofSeconds(1), Duration.ofSeconds(1), 3, "https://graph.microsoft.com", Duration.ZERO);
+
+        assertThrows(IllegalStateException.class, () -> new OutlookProductionConfigurationValidator(properties, environment).afterSingletonsInstantiated());
+    }
+
+    @Test
+    void rejectsARetryAfterMaximumAboveTheApprovedBound() {
+        var environment = mock(Environment.class);
+        when(environment.matchesProfiles("prod")).thenReturn(true);
+        var properties = new OutlookProperties("tenant", "client", "secret", "https://login.microsoftonline.com",
+                "https://app.example.test/callback", "https://app.example.test", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", 1,
+                Duration.ofSeconds(1), Duration.ofSeconds(1), 3, "https://graph.microsoft.com", Duration.ofMinutes(6));
+
+        assertThrows(IllegalStateException.class, () -> new OutlookProductionConfigurationValidator(properties, environment).afterSingletonsInstantiated());
+    }
+
     private static OutlookProductionConfigurationValidator validator(String graphBaseUri) {
         var environment = mock(Environment.class);
         when(environment.matchesProfiles("prod")).thenReturn(true);

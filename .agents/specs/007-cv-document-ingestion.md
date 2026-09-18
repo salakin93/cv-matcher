@@ -61,10 +61,35 @@ calcula rankings.
 5. Archivos rechazados no se conservan. Sólo se persiste una razón segura y
    mínima de ignorado; nunca nombre de archivo, contenido, URL Graph o payload
    de antimalware en logs, API, auditoría o métricas.
+6. Descargar adjuntos de mensajes requiere `Mail.Read`. Al activar esta spec,
+   una conexión que no incluya ese scope pasa a `REAUTHORIZATION_REQUIRED`; sólo
+   un `ADMIN` puede completar una nueva autorización. El worker nunca eleva el
+   permiso ni reintenta esa condición automáticamente.
+
+## Contratos internos
+
+- `job` expone un puerto de ingesta para reclamar sólo jobs
+  `INGESTING_DOCUMENTS`, renovar/liberar lease, confirmar cancelación y obtener
+  mensajes descubiertos del job como referencias internas opacas. `document` no
+  consulta tablas de `job` ni de `outlook` directamente.
+- `outlook` expone un puerto de adjuntos que recibe sólo esas referencias
+  internas y permite: listar metadatos mínimos y descargar bytes de un adjunto
+  seleccionado. El puerto obtiene tokens y valida `Mail.Read`; `document` nunca
+  descifra tokens ni construye URLs Graph.
+- La lista Graph usa exclusivamente
+  `/v1.0/me/mailFolders/inbox/messages/{messageId}/attachments` con selección
+  mínima de `id`, `size` e `isInline`. Sólo se acepta `fileAttachment`; adjuntos
+  inline, item y reference se ignoran con código seguro. Los bytes se obtienen
+  sólo mediante `/{attachmentId}/$value`, después de validar límites y sin
+  solicitar cuerpo, asunto, remitente ni destinatarios.
+- No se crea persistencia nueva de IDs Graph en claro: la referencia interna de
+  mensaje ya aportada por discovery se usa sólo para la llamada Graph y los
+  documentos persisten hashes. Logs, errores, API, auditoría y métricas usan
+  hashes o códigos seguros según esta spec.
 
 ## Modelo y persistencia
 
-Crear exclusivamente `V8__cv_document_ingestion.sql`; no modificar V1–V7.
+Crear exclusivamente `V10__cv_document_ingestion.sql`; no modificar V1–V9.
 
 ### `candidate_document`
 
@@ -171,6 +196,8 @@ No usar UUID, hash, formato de nombre, tamaño exacto, job o vacante como etique
 - `prod` falla rápido si storage privado, clave o antivirus no están disponibles.
   `test` usa directorio temporal y dobles; nunca CVs reales, claves reales ni
   Graph/antimalware externos.
+- La autorización Outlook exige `Mail.Read` para este worker; conexiones sin ese
+  scope requieren reautorización administrativa y no se modifican por API/UI.
 
 ## Estrategia de pruebas
 
@@ -190,7 +217,7 @@ No usar UUID, hash, formato de nombre, tamaño exacto, job o vacante como etique
 - Doble AV detecta/cae; storage falla/move falla sin registros disponibles u
   archivos temporales huérfanos.
 - Límites, `429`, token revocado, cero válidos y transición de job correcta.
-- V8 desde V1–V7, detalle seguro, OpenAPI, auditoría/métricas sin PII,
+- V10 desde V1–V9, detalle seguro, OpenAPI, auditoría/métricas sin PII,
   `./gradlew test` y `git diff --check`.
 
 ## Criterios de aceptación
@@ -215,7 +242,7 @@ No usar UUID, hash, formato de nombre, tamaño exacto, job o vacante como etique
    generan estados/códigos seguros y no exponen datos de terceros.
 10. OpenAPI, auditoría, logs y métricas no exponen CV, nombre, ruta, hash, token,
     secreto, URL Graph ni UUID como etiqueta de métrica.
-11. V8 y pruebas Testcontainers con dobles validan seguridad, cifrado,
+11. V10 y pruebas Testcontainers con dobles validan seguridad, cifrado,
     idempotencia, límites y errores sin habilitar candidatos, ranking, descarga,
     notificaciones, exportaciones o UI.
 
@@ -232,3 +259,4 @@ No usar UUID, hash, formato de nombre, tamaño exacto, job o vacante como etique
 ## Definition of Ready
 
 `READY_FOR_DEV`
+> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.

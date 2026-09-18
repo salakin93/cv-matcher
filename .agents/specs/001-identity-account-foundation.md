@@ -263,3 +263,4 @@ entregan entidades JPA directamente a controllers.
 El alcance, contratos, datos, seguridad y criterios de aceptación están
 definidos. No existe pregunta funcional o arquitectónica bloqueante para
 implementar este incremento backend.
+> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.

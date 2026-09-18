@@ -25,7 +25,7 @@ final class OutlookProductionConfigurationValidator implements SmartInitializing
                 || properties.tokenEncryptionKeyVersion() <= 0 || properties.connectTimeout() == null || properties.connectTimeout().isNegative() || properties.connectTimeout().isZero()
                 || properties.readTimeout() == null || properties.readTimeout().isNegative() || properties.readTimeout().isZero()
                 || properties.maxRetries() < 1 || properties.maxRetries() > 3 || !validAes256Key(properties.tokenEncryptionKey())
-                || !allowedGraphBaseUri(properties.graphBaseUri())) {
+                || !allowedGraphBaseUri(properties.graphBaseUri()) || invalidMaxRetryAfter(properties.maxRetryAfter())) {
             throw new IllegalStateException("Invalid production Outlook configuration");
         }
     }
@@ -65,6 +65,11 @@ final class OutlookProductionConfigurationValidator implements SmartInitializing
         } catch (IllegalArgumentException exception) {
             return false;
         }
+    }
+
+    private static boolean invalidMaxRetryAfter(java.time.Duration value) {
+        return value == null || value.isNegative() || value.isZero()
+                || value.compareTo(OutlookProperties.MAXIMUM_MAX_RETRY_AFTER) > 0;
     }
 
     private static boolean blank(String value) {

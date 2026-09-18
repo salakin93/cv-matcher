@@ -1,6 +1,7 @@
 package com.cvmatcher.cv_matcher_backend.outlook.infrastructure;
 
 import com.cvmatcher.cv_matcher_backend.outlook.OutlookProperties;
+import com.cvmatcher.cv_matcher_backend.outlook.application.OutlookOAuthScopes;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -10,6 +11,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -18,7 +20,6 @@ import java.time.format.DateTimeFormatter;
 final class RestClientOutlookOAuthClient implements OutlookOAuthClient {
     private static final String AUTHORIZATION_PATH = "/oauth2/v2.0/authorize";
     private static final String TOKEN_PATH = "/oauth2/v2.0/token";
-    private static final String SCOPES = "openid profile offline_access Mail.ReadBasic";
     private final RestClient client;
     private final OutlookProperties properties;
 
@@ -35,7 +36,7 @@ final class RestClientOutlookOAuthClient implements OutlookOAuthClient {
         return UriComponentsBuilder.fromUriString(properties.authority()).path(AUTHORIZATION_PATH)
                 .queryParam("client_id", properties.clientId()).queryParam("response_type", "code")
                 .queryParam("redirect_uri", properties.redirectUri()).queryParam("response_mode", "query")
-                .queryParam("scope", SCOPES).queryParam("state", state).queryParam("nonce", nonce)
+                .queryParam("scope", OutlookOAuthScopes.authorizationValue()).queryParam("state", state).queryParam("nonce", nonce)
                 .queryParam("code_challenge", codeChallenge).queryParam("code_challenge_method", "S256")
                 .build().encode().toUriString();
     }
@@ -89,24 +90,32 @@ final class RestClientOutlookOAuthClient implements OutlookOAuthClient {
                 ? Failure.Kind.TEMPORARILY_UNAVAILABLE : Failure.Kind.AUTHORIZATION_FAILED);
     }
 
-    private static void pause(String retryAfter, int attempt) {
+    private void pause(String retryAfter, int attempt) {
         try {
-            Thread.sleep(retryDelayMilliseconds(retryAfter, attempt));
+            Thread.sleep(retryDelayMilliseconds(retryAfter, attempt, properties.maxRetryAfter()));
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new Failure(Failure.Kind.TEMPORARILY_UNAVAILABLE);
         }
     }
 
-    private static long retryDelayMilliseconds(String retryAfter, int attempt) {
-        if (retryAfter == null) return attempt * 200L;
+    static long retryDelayMilliseconds(String retryAfter, int attempt, Duration maximum) {
+        long maximumMilliseconds = maximum.toMillis();
+        long fallback = Math.min(maximumMilliseconds, attempt * 200L);
+        if (retryAfter == null) return fallback;
         try {
-            return Math.max(1L, Long.parseLong(retryAfter)) * 1000L;
+            long seconds = Long.parseLong(retryAfter);
+            if (seconds <= 0 || seconds >= maximumMilliseconds / 1000L) return maximumMilliseconds;
+            return seconds * 1000L;
         } catch (NumberFormatException ignored) {
             try {
-                return Math.max(0L, ZonedDateTime.parse(retryAfter, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - Instant.now().toEpochMilli());
+                var now = Instant.now();
+                var retryAt = ZonedDateTime.parse(retryAfter, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
+                if (!retryAt.isAfter(now)) return 0L;
+                if (!retryAt.isBefore(now.plus(maximum))) return maximumMilliseconds;
+                return Duration.between(now, retryAt).toMillis();
             } catch (RuntimeException ignoredAgain) {
-                return attempt * 200L;
+                return fallback;
             }
         }
     }

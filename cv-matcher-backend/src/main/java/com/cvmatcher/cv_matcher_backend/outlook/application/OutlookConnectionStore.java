@@ -58,14 +58,18 @@ final class OutlookConnectionStore {
             var current = connection();
             if (current == null || current.version() != expectedConnection.version()
                     || !Arrays.equals(current.ciphertext(), expectedConnection.ciphertext())) return;
-            transitionToReauthorizationRequired();
+            transitionToReauthorizationRequired(null);
         });
     }
 
     void requireReauthorization() {
+        requireReauthorization((UUID) null);
+    }
+
+    void requireReauthorization(UUID actor) {
         transactions.executeWithoutResult(status -> {
             lock();
-            transitionToReauthorizationRequired();
+            transitionToReauthorizationRequired(actor);
         });
     }
 
@@ -88,9 +92,9 @@ final class OutlookConnectionStore {
         return jdbc.queryForObject("select status from outlook_connection where id=1 for update", String.class);
     }
 
-    private void transitionToReauthorizationRequired() {
+    private void transitionToReauthorizationRequired(UUID actor) {
         jdbc.update("update outlook_connection set status='REAUTHORIZATION_REQUIRED',refresh_token_ciphertext=null,last_error_code=null,updated_at=current_timestamp,version=version+1 where id=1");
-        observability.audit(null, "OUTLOOK_REAUTHORIZATION_REQUIRED");
+        observability.audit(actor, "OUTLOOK_REAUTHORIZATION_REQUIRED");
     }
 
     private AesGcmCipher cipher() {

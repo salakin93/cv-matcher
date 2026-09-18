@@ -41,6 +41,6 @@ These constraints apply to every role and every delivery. If a requirement confl
 - Use Java 25 for backend development. Do not lower the Java baseline without explicit approval.
 - Follow the role sequence defined in `.agents/workflow.md`: approved requirements/specification, implementation, technical review, QA, security/privacy review, then release review.
 - Scope implementation to the approved specification. Do not add adjacent features merely because they seem useful.
-- Add proportionate automated tests for new behaviour. Do not use real credentials, real CVs, or production integrations in tests.
+- During the temporary integrated manual-validation phase, do not create or require automated tests for each increment. Document manual frontend/backend validation instead; preserve existing tests and the deferred automation strategy for the final stabilization phase. Do not use real credentials, real CVs, or production integrations in either manual validation or future tests.
 - Keep commits atomic, written in English, and formatted as Conventional Commits with a meaningful title and description.
 - Do not alter approved PRD decisions without updating the PRD and obtaining explicit approval.

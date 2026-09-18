@@ -152,7 +152,8 @@ class JobIntegrationTest {
         mockMvc.perform(post("/api/v1/vacancies/{id}/report-jobs", vacancy.id()).header("Authorization", token).contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         mockMvc.perform(get("/api/v1/report-jobs/{id}", firstJob).header("Authorization", token))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(firstJob.toString())).andExpect(jsonPath("$.requirements.length()").value(2));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(firstJob.toString())).andExpect(jsonPath("$.requirements.length()").value(2))
+                .andExpect(jsonPath("$.acceptedDocumentCount").value(0)).andExpect(jsonPath("$.ignoredDocumentCount").value(0)).andExpect(jsonPath("$.quarantinedDocumentCount").value(0));
 
         jdbc.update("update matching_job set status='FAILED',finished_at=?,updated_at=? where id=?", Timestamp.from(Instant.now()), Timestamp.from(Instant.now()), firstJob);
         var secondJob = jobs.retry(actor, firstJob).jobId();
@@ -200,6 +201,8 @@ class JobIntegrationTest {
                 .andExpect(content().string(containsString("/api/v1/vacancies/{vacancyId}/report-jobs")))
                 .andExpect(content().string(containsString("/api/v1/report-jobs/{jobId}/cancel")))
                 .andExpect(content().string(containsString("ACTIVE_JOB_EXISTS")))
+                .andExpect(content().string(containsString("acceptedDocumentCount")))
+                .andExpect(content().string(containsString("quarantinedDocumentCount")))
                 .andExpect(content().string(containsString("\"204\"")));
     }
 

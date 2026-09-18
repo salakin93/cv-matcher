@@ -18,7 +18,6 @@ import java.util.UUID;
 @Service
 public class OutlookService {
     private static final Logger log = LoggerFactory.getLogger(OutlookService.class);
-    private static final List<String> REQUIRED_SCOPES = List.of("openid", "profile", "offline_access", "Mail.ReadBasic");
     private final OutlookProperties properties;
     private final OutlookAuthorizationAttempts attempts;
     private final OutlookConnectionStore connections;
@@ -81,7 +80,7 @@ public class OutlookService {
             return redirect("connected");
         } catch (OutlookOAuthClient.Failure exception) {
             accessTokens.clearCache();
-            if (exception.kind() == OutlookOAuthClient.Failure.Kind.INVALID_GRANT) connections.requireReauthorization();
+            if (exception.kind() == OutlookOAuthClient.Failure.Kind.INVALID_GRANT) connections.requireReauthorization(attempt.actor());
             observability.authorization("failed");
             logFailure(errorCode(exception));
             return redirect("error");
@@ -120,7 +119,7 @@ public class OutlookService {
     }
 
     private static boolean onlyRequestedScopes(String[] grantedScopes) {
-        return grantedScopes.length == REQUIRED_SCOPES.size() && Arrays.stream(grantedScopes).allMatch(REQUIRED_SCOPES::contains);
+        return OutlookOAuthScopes.matches(grantedScopes);
     }
 
     private static String errorCode(OutlookOAuthClient.Failure failure) {

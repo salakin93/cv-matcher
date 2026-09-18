@@ -1,4 +1,7 @@
 app:
+  job:
+    documents:
+      enabled: true
   security:
     secure-cookies: true
   cors:

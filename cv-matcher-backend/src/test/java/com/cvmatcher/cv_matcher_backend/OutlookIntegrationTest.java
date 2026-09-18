@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.cvmatcher.cv_matcher_backend.identity.application.JwtService;
 import com.cvmatcher.cv_matcher_backend.outlook.application.OutlookAccessTokenPort;
 import com.cvmatcher.cv_matcher_backend.outlook.application.OutlookException;
+import com.cvmatcher.cv_matcher_backend.outlook.application.OutlookOAuthScopes;
 import com.cvmatcher.cv_matcher_backend.outlook.infrastructure.AesGcmCipher;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterAll;
@@ -136,7 +137,7 @@ class OutlookIntegrationTest {
                         .contentType("application/json").content("{}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
 
-        assertEquals("openid profile offline_access Mail.ReadBasic",
+        assertEquals(OutlookOAuthScopes.authorizationValue(),
                 UriUtils.decode(UriComponentsBuilder
                         .fromUriString(OBJECT_MAPPER.readTree(response).get("authorizationUrl").asText())
                         .build().getQueryParams().getFirst("scope"), StandardCharsets.UTF_8));
@@ -274,6 +275,21 @@ class OutlookIntegrationTest {
         assertEquals(1L, jdbc.queryForObject("select count(*) from audit_event where action='OUTLOOK_REAUTHORIZATION_REQUIRED'", Long.class));
         assertThrows(OutlookException.class, () -> accessTokens.accessToken());
         assertEquals(2, TOKEN_REQUESTS.get());
+    }
+
+    @Test
+    void authorizationCodeInvalidGrantAuditsTheInitiatingAdministrator() throws Exception {
+        var actor = user("outlook-callback-invalid-grant@example.test", "ADMIN");
+        var authorization = startAuthorizationAttempt("Bearer " + jwt.issue(actor, "ADMIN", session(actor)));
+        TOKEN_RESPONDER.set(form -> form.contains("grant_type=authorization_code")
+                ? new TokenResponse(400, "{\"error\":\"invalid_grant\"}", null) : successResponse(form));
+
+        mockMvc.perform(get("/api/v1/admin/integrations/outlook/callback")
+                        .param("state", authorization.state()).param("code", "invalid-code"))
+                .andExpect(status().isFound());
+
+        assertEquals("REAUTHORIZATION_REQUIRED", jdbc.queryForObject("select status from outlook_connection where id=1", String.class));
+        assertEquals(actor, jdbc.queryForObject("select actor_user_id from audit_event where action='OUTLOOK_REAUTHORIZATION_REQUIRED'", UUID.class));
     }
 
     @Test
@@ -586,7 +602,7 @@ class OutlookIntegrationTest {
     }
 
     private static String tokenBody(String refreshToken, String idToken) {
-        return "{\"access_token\":\"access-token\",\"expires_in\":3600,\"refresh_token\":\"" + refreshToken + "\",\"id_token\":\"" + idToken + "\",\"scope\":\"openid profile offline_access Mail.ReadBasic\"}";
+        return "{\"access_token\":\"access-token\",\"expires_in\":3600,\"refresh_token\":\"" + refreshToken + "\",\"id_token\":\"" + idToken + "\",\"scope\":\"" + OutlookOAuthScopes.authorizationValue() + "\"}";
     }
 
     private static void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String response, String retryAfter) throws IOException {

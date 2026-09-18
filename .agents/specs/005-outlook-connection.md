@@ -70,8 +70,7 @@ incremento no lee mensajes, adjuntos ni documentos.
 
 Crear la migración inmutable `V6__outlook_connection.sql`; no modificar V1–V5.
 La corrección aprobada por Technical Review se implementa exclusivamente mediante
-`V8__outlook_connection_invariants.sql`; `V7` permanece reservado para el outbox
-de identidad de Spec 025.
+`V8__outlook_connection_invariants.sql`.
 
 ### `outlook_connection`
 
@@ -288,3 +287,4 @@ Métricas sin PII:
 005 solicita únicamente `openid`, `profile` y `offline_access`; valida el
 `id_token` sin llamar a Microsoft Graph. El permiso de Inbox pertenece a 006 y
 no bloquea la conexión inicial.
+> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.

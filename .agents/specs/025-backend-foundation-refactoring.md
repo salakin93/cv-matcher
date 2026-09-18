@@ -28,7 +28,8 @@ módulo y hace durable el correo originado por mutaciones confirmadas.
 - Separación de responsabilidades de `IdentityService` y consolidación del
   coordinador `OutlookService` sobre colaboradores tipados.
 - Contratos propios del worker de jobs, sin tipos anidados de `JobService`.
-- Migración Flyway nueva e inmutable para el outbox, pruebas unitarias e
+- Migración Flyway nueva e inmutable para el outbox, con versión por asignar al
+  retomar esta spec, pruebas unitarias e
   integración PostgreSQL/Testcontainers de regresión.
 
 ### Excluido
@@ -71,7 +72,8 @@ módulo y hace durable el correo originado por mutaciones confirmadas.
 
 ## Datos y persistencia
 
-Crear exclusivamente `V7__identity_mail_outbox.sql`.
+Crear una migración Flyway nueva e inmutable para `identity_mail_outbox`; su
+versión se asignará al retomar esta spec, sin reutilizar una versión ya aplicada.
 
 ### `identity_mail_outbox`
 
@@ -170,12 +172,14 @@ de lease por `status, locked_until`. La migración no modifica tablas existentes
 - Una sola fila se reclama por dos dispatchers; auditoría append-only coherente.
 - Regresión de APIs 001--005: auth, administración, vacantes, jobs y Outlook
   mantienen contratos, errores, métricas y OpenAPI.
-- `./gradlew test`, `git diff --check` y migración V7 desde V1--V6.
+- `./gradlew test`, `git diff --check` y migración nueva desde el historial
+  Flyway vigente al retomar esta spec.
 
 ## Criterios de aceptación
 
 1. Ninguna mutación de identidad llama `MailGateway` dentro de su transacción.
-2. V7 crea outbox durable, idempotente y recuperable sin editar V1--V6.
+2. La nueva migración asignada al retomar la spec crea un outbox durable,
+   idempotente y recuperable sin editar migraciones existentes.
 3. Registro, verificación, reset, login, refresh, administración, vacantes, jobs y
    Outlook conservan API, roles, estados y errores públicos previos.
 4. Todas las escrituras de auditoría de módulos 001--005 pasan por `AuditPort`.
@@ -192,14 +196,15 @@ de lease por `status, locked_until`. La migración no modifica tablas existentes
 | Tipo | Detalle | Tratamiento |
 | --- | --- | --- |
 | Riesgo | Correo duplicado tras caída entre SMTP y `SENT`. | Token de acción es un solo uso; retry acotado y trazabilidad de outbox. |
-| Riesgo | V7 contiene ciphertext de token de acción. | AES-GCM con clave de entorno, BD privada y sin API/log/auditoría/métrica. |
+| Riesgo | La futura migración contiene ciphertext de token de acción. | AES-GCM con clave de entorno, BD privada y sin API/log/auditoría/métrica. |
 | Dependencia | Tests requieren PostgreSQL/Testcontainers. | Reusar configuración existente y fake `MailGateway`. |
 | Riesgo | Refactor cambia contratos sin advertencia. | Pruebas de regresión OpenAPI/API antes de revisión. |
 
 ## Definition of Ready
 
-`READY_FOR_DEV`
+`BLOCKED`
 
-El alcance está limitado a deuda técnica comprobada de 001--005. No hay cambios
-funcionales, de frontend ni de proveedores externos; V7 y el comportamiento de
-entrega post-commit están definidos.
+La spec se encuentra diferida para priorizar el flujo de producto 006--024. Antes
+de retomarla debe dividirse en incrementos pequeños y asignar la versión de cada
+migración según el historial Flyway vigente.
+> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.

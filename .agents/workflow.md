@@ -32,6 +32,12 @@ Product Requirements Analyst
 
 Not every increment needs frontend work. Technical, QA, and security reviews may run in parallel only after the technical review has approved the scoped implementation.
 
+## Temporary integrated manual-validation policy
+
+Until the product reaches the explicitly planned final stabilization phase, individual increments use documented manual validation instead of creating or requiring new automated tests. Validation must exercise the implemented frontend/backend flow when applicable and record cases, outcome, environment, and defects resolved. Existing tests must not be removed, disabled, or made less strict to obtain approval.
+
+The test strategies retained in each spec are the mandatory automation backlog for final stabilization. That phase must execute the accumulated unit, integration, API, E2E, security/privacy, migration, and regression coverage before a production release decision. `git diff --check`, review gates, privacy/security constraints, and safe manual verification remain required throughout.
+
 ## Responsibilities and gates
 
 ### 1. Product Requirements Analyst
@@ -45,26 +51,26 @@ Not every increment needs frontend work. Technical, QA, and security reviews may
 
 - Converts approved PRD scope into a small specification.
 - Records architecture decisions and identifies blockers before implementation.
-- Each spec must state: goal, in-scope behaviour, explicit exclusions, API/data contracts when relevant, security/privacy requirements, acceptance criteria, tests, and dependencies.
+- Each spec must state: goal, in-scope behaviour, explicit exclusions, API/data contracts when relevant, security/privacy requirements, acceptance criteria, a manual-validation plan, deferred automation backlog, and dependencies.
 - Split broad work into ordered increments. Do not create a spec that requires unrelated future components to be complete.
 
 ### 3. Developers
 
 - Implement only the approved spec and its acceptance criteria.
 - Do not add adjacent features, speculative infrastructure, or later increments.
-- Add proportionate automated tests and run the relevant validation commands.
+- Do not create or require new automated tests during the temporary integrated manual-validation phase. Execute and document the manual validation plan; preserve all existing tests and automation plans for final stabilization.
 - Keep worktree changes focused. Make atomic English Conventional Commits only after the required reviews approve, unless an approved development checkpoint explicitly requests one.
 
 ### 4. Technical Reviewer
 
 - Reviews only the named spec and explicitly listed commits/files.
-- Evaluates design, maintainability, transactions, concurrency, migrations, error handling, tests, and consistency with the approved architecture.
+- Evaluates design, maintainability, transactions, concurrency, migrations, error handling, documented manual-validation evidence, deferred automation coverage, and consistency with the approved architecture.
 - Must not report missing functionality belonging to excluded or future increments.
 - Reports `APROBADO` or `CAMBIOS_REQUERIDOS`, with severity, evidence, impact, recommendation, affected spec, and validation commands.
 
 ### 5. QA Reviewer
 
-- Verifies implemented behaviour only against the named approved spec and applicable PRD acceptance criteria.
+- Verifies implemented behaviour only against the named approved spec and applicable PRD acceptance criteria, using the documented manual-validation plan during the temporary phase.
 - Does not modify code.
 - Reports reproducible findings by severity and validation commands.
 
@@ -76,7 +82,7 @@ Not every increment needs frontend work. Technical, QA, and security reviews may
 
 ### 7. Release Reviewer
 
-- Confirms technical, QA, and security approval; test results; migration and deployment readiness; documentation; and a clean diff.
+- Confirms technical, QA, and security approval; manual-validation evidence during the temporary phase, or the full automated test results at final stabilization; migration and deployment readiness; documentation; and a clean diff.
 - A release is blocked by unresolved critical or high-severity findings.
 
 ## Review and correction loop
@@ -92,7 +98,7 @@ Not every increment needs frontend work. Technical, QA, and security reviews may
 - Use English Conventional Commits, for example `feat(auth): add email verification`.
 - Each commit must have a concise title and an English body explaining the meaningful change and validation performed.
 - Do not mix unrelated work, generated files, credentials, or unreviewed changes.
-- Before committing, run relevant tests and `git diff --check`.
+- Before committing, execute the applicable documented manual validation and `git diff --check`. Automated test execution becomes mandatory again during final stabilization.
 
 ## Required handoff format
 
