@@ -25,7 +25,7 @@ These constraints apply to every role and every delivery. If a requirement confl
 - CV files, extracted text, personal data, access tokens, refresh tokens, client secrets, encryption keys, and provider responses must never be committed, logged, exposed in API errors, or rendered to unauthorized users.
 - Original CV downloads require authenticated authorization. Public permanent file links are forbidden.
 - A privacy deletion must remove the original file and processed personal data immediately, preserve only minimal non-personal audit information, and anonymize historical report entries.
-- A trashed CV is excluded from every report, ranking, and historical search. It can be restored for 180 days, after which it is permanently removed.
+- A trashed CV is excluded from new reports, rankings, analyses, and historical searches, and cannot be downloaded. Completed report versions remain unchanged; it can be restored for 180 days, after which it is permanently removed.
 
 ## Integrations and jobs
 

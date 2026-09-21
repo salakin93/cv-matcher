@@ -1,78 +1,101 @@
-# FE-005 - Integración Outlook
+# FE-005 - Outlook Connection
 
-## Objetivo
+## Objective
 
-Ofrecer a ADMIN un panel mínimo para conocer estado de Outlook e iniciar/reautorizar OAuth sin que secretos, tokens, state o code lleguen a almacenamiento cliente.
+Provide an ADMIN-only React screen to view the safe shared Outlook connection
+state and begin or reauthorize the backend-owned OAuth flow.
 
-## Referencias
+## References
 
-- `docs/PRD.md`, sección 9.
-- `docs/FRONTEND_PHASE_SPECS.md`, FE-005.
-- `docs/FRONTEND_ROADMAP.md`, FE-005.
-- `.agents/specs/005-outlook-connection.md`.
+- `docs/prd-003-outlook-message-discovery.md` sections 1 through 3.
+- `docs/architecture.md` sections 5.3, 8.1, and 9.
+- Frontend planning documents, FE-005; backend specs 001 and 005; FE-001.
 
-## Alcance
+## Scope
 
-### Incluido
+### Included
 
-- Ruta ADMIN de estado de conexión y acciones iniciar/reautorizar.
-- Navegación a URL proporcionada por backend y retorno seguro definido por contrato.
+- ADMIN route/navigation, safe connection status, start/reauthorization action,
+  return outcome handling, and state refresh.
 
-### Excluido
+### Excluded
 
-- Mostrar/editar tenant, mailbox, secretos, tokens, scopes sin aprobación, Inbox o mensajes.
+- Mailbox/message/Inbox views, provider configuration, tenant identity, tokens,
+  client secrets, OAuth code/state storage, and recruiter access.
 
-## Comportamiento y reglas
+## UX Behavior
 
-- El navegador abre sólo la URL de autorización emitida por backend y no fabrica `state`, PKCE ni callback.
-- La pantalla de retorno elimina parámetros OAuth de la URL al procesar el resultado backend y recarga estado.
-- Estado `REAUTHORIZATION_REQUIRED` se presenta sin razón sensible.
+- Display only generated safe states: `NOT_CONNECTED`, `CONNECTED`,
+  `REAUTHORIZATION_REQUIRED`, and `ERROR`, plus safe date/code fields supplied
+  by API. Give clear Spanish next steps without technical/provider detail.
+- The browser navigates only to a backend-provided authorization destination. The
+  backend handles callback validation; on return, the SPA discards callback query
+  data, shows a safe outcome, and refreshes status. A failed reauthorization must
+  not claim that an existing connection was replaced.
 
-## Contratos
+## API Contract Dependencies
 
-Usar sólo OpenAPI 005 para estado, inicio/reautorización y resultado de callback backend.
+- Consume generated OpenAPI from backend spec 005 for safe connection status and
+  authorization initiation/return status. Do not hard-code OAuth paths, create
+  Microsoft requests, retain `code`/`state`, or model credentials in TypeScript.
 
-## Datos y persistencia
+## Routes, State, Accessibility, and Responsive Design
 
-No guardar URL, `state`, `code`, tokens ni información de proveedor después de navegar.
+- The protected ADMIN route is guarded by FE-001 role state; recruiters have no
+  navigation entry and receive the normal `403` view for direct access.
+- Handle loading, no connection, connected, reauthorization required, safe error,
+  pending navigation, return, retry, and expired session. Use accessible status
+  announcements and labelled action buttons. On mobile, status and primary action
+  remain visible without horizontal layout dependence.
 
-## Integraciones
+## Frontend Security and Privacy
 
-La integración Microsoft es server-side; frontend sólo realiza navegación autorizada.
+- Never persist, render, log, or send OAuth codes, state, tokens, mailbox email,
+  tenant, provider payloads, callback URLs, or secrets. Scrub callback query data
+  from browser history after it has been handled.
 
-## Errores y estados
+## Configuration and Integrations
 
-Estados loading, conectado, no conectado, reautorización, error seguro y retry cuando contrato lo admita.
+- Reuse FE-001 generated API client and role guard. OAuth remains an integration
+  exclusively between browser navigation and backend; no provider SDK/client is
+  added to the SPA.
 
-## Seguridad y privacidad
+## Data, Persistence, Errors, and Observability
 
-Sólo ADMIN. No renderizar ni loguear secretos, tokens, IDs de tenant/mailbox, parámetros OAuth o payloads Graph.
+- Keep only current safe API status in memory. Normalize auth and safe API errors;
+  client telemetry excludes provider and authorization data.
 
-## Observabilidad
+## Manual Validation
 
-Errores técnicos sin URL de OAuth ni parámetros.
+- Use a backend double/sandbox, never production credentials, to validate each
+  status, successful return, cancelled/failed return with existing connection,
+  `ERROR`, recruiter denial, browser-history cleanup, keyboard, mobile, and
+  expired-session behavior.
 
-## Estrategia de pruebas
+## Deferred Automation
 
-Componentes de estados, contrato OpenAPI, E2E de navegación simulada y limpieza de parámetros de retorno.
+- Final stabilization: route/role component tests, generated-contract tests, E2E
+  with backend OAuth double for return paths, URL-scrubbing tests, and a11y/mobile
+  coverage.
 
-## Criterios de aceptación
+## Acceptance Criteria
 
-1. Sólo ADMIN accede al panel.
-2. Iniciar/reautorizar sólo abre una URL backend.
-3. No quedan secretos ni parámetros OAuth en UI, URL, logs o persistencia cliente.
+1. Only ADMIN can view or initiate the shared Outlook connection flow.
+2. The screen shows only safe status data and no credential/provider identity.
+3. The SPA never retains OAuth callback or credential values after return.
+4. A failed reauthorization does not falsely represent the prior connection state.
 
-## Riesgos y dependencias
+## Dependencies and Risks
 
-| Tipo | Detalle | Tratamiento |
-| --- | --- | --- |
-| BLOCKER | OpenAPI/callback de 005 no aprobado. | No implementar flujo OAuth. |
+- Depends on FE-001 and backend 005 generated OpenAPI.
+- RISK: final backend return/callback UX contract must provide a safe SPA outcome.
 
-## Decisiones / preguntas abiertas
+## Decisions / Open Questions
 
-- **ARCHITECTURAL DECISION:** OAuth confidencial y sus tokens permanecen en backend.
+- ARCHITECTURAL DECISION: backend is the confidential OAuth client and callback
+  endpoint; SPA only follows backend-issued navigation.
+- BLOCKER: requires approval and generated OpenAPI from backend 005.
 
 ## Definition of Ready
 
-`BLOCKED`
-> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.
+`BLOCKED` - FE-001 and approved generated OpenAPI from backend 005.

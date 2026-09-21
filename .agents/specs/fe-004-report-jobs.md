@@ -1,79 +1,106 @@
-# FE-004 - Trabajos de reporte
+# FE-004 - Report Jobs
 
-## Objetivo
+## Objective
 
-Permitir solicitar y seguir trabajos asíncronos de reporte sin bloquear la interfaz ni exponer metadatos de correo o documentos.
+Let authorized users request, observe, cancel, and retry durable asynchronous
+report jobs from a vacancy without blocking the browser.
 
-## Referencias
+## References
 
-- `docs/PRD.md`, secciones 4 y 5.
-- `docs/FRONTEND_PHASE_SPECS.md`, FE-004.
-- `docs/FRONTEND_ROADMAP.md`, FE-004.
-- `.agents/specs/004-report-job-queue.md` a `006-outlook-inbox-discovery.md`.
+- `docs/prd-002-vacancies-async-jobs.md` sections 5 through 10.
+- `docs/prd-003-outlook-message-discovery.md` sections 6 through 10.
+- `docs/prd-004-secure-cv-ingestion.md` sections 8 and 9.
+- `docs/architecture.md` sections 7 and 9.
+- Frontend planning documents, FE-004; backend specs 004 through 006; FE-003.
 
-## Alcance
+## Scope
 
-### Incluido
+### Included
 
-- Solicitud de job desde una vacante, tarjeta de estado, polling con backoff, cancelación, retry y navegación al reporte.
-- Estados y advertencias seguros entregados por API.
+- Job request with generated threshold input if supplied by contract, vacancy job
+  history/detail, safe counts/warnings, polling with backoff, cancel, retry, and
+  navigation to a completed report when the API supplies one.
 
-### Excluido
+### Excluded
 
-- Inbox, mensajes, adjuntos, logs Graph, análisis Claude y renderizado de ranking.
+- Inbox/message/attachment views, Graph identifiers, document names/content,
+  worker controls, report ranking UI, push transport, and notifications inbox.
 
-## Comportamiento y reglas
+## UX Behavior
 
-- La solicitud responde de forma asíncrona; la UI nunca espera ingestión o análisis.
-- Sólo se consulta el estado de job entregado por backend y se detiene polling en estados terminales, salida de ruta, `401` o `403`.
-- Doble clic queda bloqueado mientras exista solicitud en curso. Retry/cancelación se habilitan sólo si OpenAPI lo declara.
+- Job creation immediately presents accepted/queued state; the SPA never waits for
+  Outlook, document processing, Claude, or ranking.
+- Render only API status, terminal outcome, aggregate counts, safe warnings, and
+  safe failure codes. Cancel is available only for API-designated active states;
+  retry only for `FAILED` and `REAUTHORIZATION_REQUIRED`.
+- Disable duplicate submission while a request is pending, reconcile `409` active-
+  job conflicts by refreshing history, and stop polling when leaving the view,
+  logging out, or reaching terminal state. `REAUTHORIZATION_REQUIRED` links only
+  to the existing ADMIN Outlook route where authorized.
 
-## Contratos
+## API Contract Dependencies
 
-Consumir OpenAPI aprobado de 004-006 para crear, consultar, cancelar o reintentar jobs y navegar con IDs entregados por API.
+- Consume generated OpenAPI from backend specs 004-006 for job create/list/detail,
+  cancel/retry, status/counters/warnings, terminal report reference, and allowed
+  actions. Do not infer transitions, poll intervals, endpoint paths, or Graph data.
 
-## Datos y persistencia
+## Routes, State, Accessibility, and Responsive Design
 
-Estado de polling en memoria. No almacenar `jobId`, detalles de documentos ni warnings persistentemente.
+- Extend FE-003 vacancy detail with a job section and protected job detail/history
+  routes. Model initial, accepted, polling, warning, terminal, conflict, retry,
+  and unavailable states explicitly.
+- Status changes use non-disruptive live announcements; actions have labels and
+  confirmations. Mobile prioritizes current status and actions before secondary
+  counts/history, while retaining keyboard access to all details.
 
-## Integraciones
+## Frontend Security and Privacy
 
-El navegador no llama Outlook ni Claude.
+- Never render or log leases, worker metadata, Outlook IDs, email metadata,
+  attachment names, document references, provider payloads, tokens, or CV data.
+- Browser polling uses the authenticated API client only and stops on `401`.
 
-## Errores y estados
+## Configuration and Integrations
 
-Mostrar estados backend, loading, retry, fallo seguro y `REAUTHORIZATION_REQUIRED` sin detalles de proveedor.
+- Reuse FE-001 client configuration. Polling/backoff is a single frontend job-
+  state utility, not duplicated by screens. No browser Graph or Claude client.
 
-## Seguridad y privacidad
+## Data, Persistence, Errors, and Observability
 
-Rutas autenticadas; warnings no renderizan correo, remitente, adjuntos, rutas o payloads externos.
+- Keep job state in memory and refresh from API as authority. Normalize `401`,
+  `403`, `409`, `422`, and safe server errors; emit no PII in client diagnostics.
 
-## Observabilidad
+## Manual Validation
 
-Sin logs de identificadores de mensajes/documentos ni contenido de warnings.
+- With backend doubles and synthetic data, validate accepted request, one-active-
+  job conflict, each visible status, partial warning, cancellation, allowed and
+  disallowed retry, polling cleanup/backoff, navigation on completion, access
+  denial, keyboard announcements, mobile, and slow/offline retry feedback.
 
-## Estrategia de pruebas
+## Deferred Automation
 
-Pruebas de scheduler/polling, cancelación/retry y E2E de solicitud a estados terminales con servidor simulado.
+- Final stabilization: state-machine component tests, fake-timer polling tests,
+  generated-contract tests, E2E for request/cancel/retry/conflict, and a11y/mobile
+  regressions.
 
-## Criterios de aceptación
+## Acceptance Criteria
 
-1. Solicitar reporte devuelve control inmediato a la UI.
-2. Polling tiene backoff, se detiene correctamente y no duplica solicitudes.
-3. Fallos y reautorización son seguros y accionables sólo cuando API lo permite.
+1. Creating a job never blocks the UI on external processing.
+2. The UI presents only safe, API-authoritative job status/counters/warnings.
+3. Cancel and retry are available only when the API permits them, and double
+   activation does not create duplicate requests.
+4. Polling ends safely on terminal state, unmount, and lost session.
 
-## Riesgos y dependencias
+## Dependencies and Risks
 
-| Tipo | Detalle | Tratamiento |
-| --- | --- | --- |
-| Dependencia satisfecha | FE-003 está disponible en frontend y OpenAPI contiene los contratos de cola de 004. | Reutilizar selección de vacante, sesión y tipos generados. |
-| BLOCKER | Backend 005/006 no está disponible: faltan V6/V7 y el módulo Outlook/worker que entrega transiciones reales y `REAUTHORIZATION_REQUIRED`. | Esperar contratos OpenAPI y validación de 005/006 antes de implementar polling, retry/cancelación y estados terminales. |
+- Depends on FE-003 and backend 004-006 generated OpenAPI.
+- RISK: contract must identify safe polling data and terminal report navigation.
 
-## Decisiones / preguntas abiertas
+## Decisions / Open Questions
 
-- **ARCHITECTURAL DECISION:** El backend durable es fuente de verdad de estado; frontend no infiere transiciones.
+- ARCHITECTURAL DECISION: polling with backoff is used until an approved push
+  contract exists.
+- BLOCKER: requires approval and generated OpenAPI from backend 004-006.
 
 ## Definition of Ready
 
-`BLOCKED`
-> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.
+`BLOCKED` - FE-003 plus approved generated OpenAPI from backend 004-006.

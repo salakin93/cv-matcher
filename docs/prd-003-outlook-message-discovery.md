@@ -81,12 +81,15 @@ El sistema descubre unicamente la informacion minima necesaria:
 - Referencia interna inmutable del mensaje.
 - Fecha de recepcion.
 - Indicador de si tiene adjuntos.
+- Correo del remitente, solo para un mensaje con adjuntos y unicamente como
+  segunda clave interna de deduplicacion si el CV no contiene correo. Se cifra,
+  no se muestra ni se envia a Claude, y se elimina con los datos del documento.
 
 El sistema no lee ni conserva:
 
 - Cuerpo o vista previa.
 - Asunto.
-- Remitente.
+- Nombre visible del remitente.
 - Destinatarios.
 - Categorias.
 - Contenido de correo.
@@ -107,7 +110,7 @@ exportaciones, auditoria, logs ni metricas.
 
 - El sistema consulta mensajes por paginas hasta terminar el rango.
 - Usa referencias inmutables para que mover un correo no rompa el procesamiento.
-- El sistema aplica un limite operativo de mensajes por job.
+- El sistema aplica un limite operativo de 1000 mensajes por job.
 - Si se alcanza ese limite, procesa el subconjunto seguro descubierto y el
   resultado final debe indicar advertencia de alcance parcial.
 - El reclutador puede crear otro job con un rango mas acotado.

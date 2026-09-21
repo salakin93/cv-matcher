@@ -4,7 +4,10 @@ This workflow applies to every product increment. Its purpose is to keep decisio
 
 ## Sources of truth
 
-1. `docs/PRD.md` — approved functional requirements.
+1. `docs/PRD.md` — approved functional requirements. The refined documents
+   `docs/prd-001-*.md` through `docs/prd-011-*.md` supersede conflicting
+   sections of this general PRD; the general PRD must be aligned before
+   implementation begins.
 2. `docs/PRODUCT_BACKLOG.md` — approved product breakdown and delivery order.
 3. `.agents/context/project.md` — concise product context.
 4. `.agents/context/constraints.md` — mandatory boundaries.

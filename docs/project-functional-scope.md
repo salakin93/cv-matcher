@@ -197,14 +197,13 @@ de contratacion.
 - Estado humano por candidato y reporte: `PENDIENTE`, `EN_REVISION`,
   `PRESELECCIONADO`, `DESCARTADO`.
 - Descarga autenticada y autorizada de CV.
-- Filtros por score, cumplimiento, disponibilidad, advertencias y evidencia.
+- Filtros por score, cumplimiento, advertencias y evidencia.
 - Exportacion PDF/XLSX con minimizacion de datos.
 - Auditoria de descargas y exportaciones.
-- Perfiles compartidos y correccion de informacion extraida.
 
 ### Estado
 
-- Pendiente: Specs 013 a 018.
+- Pendiente: Specs 013 a 015.
 - No debe iniciarse descarga antes de cerrar autorizacion de Spec 014.
 - No debe iniciarse exportacion antes de existir ranking inmutable.
 
@@ -217,6 +216,7 @@ controlada.
 
 - Busqueda historica solo tras confirmacion explicita.
 - Disponibilidad y correcciones de perfil compartido.
+- Filtro por disponibilidad en reportes y disponibilidad en exportaciones.
 - Papelera, restauracion por 180 dias y purga automatica.
 - Eliminacion inmediata por privacidad.
 - Eliminacion del original y datos procesados.
@@ -227,7 +227,7 @@ controlada.
 
 ### Estado
 
-- Pendiente: Specs 019 a 024.
+- Pendiente: Specs 016 a 024.
 - Depende de candidatos, reportes y documentos consolidados.
 
 ## Frontend

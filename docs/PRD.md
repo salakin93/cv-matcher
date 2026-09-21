@@ -46,7 +46,7 @@ Una vacante tiene título, descripción, rango `from`/`to` y uno o más requisit
 - PDFs corruptos, protegidos con contraseña, sin texto útil, u otros documentos que no sean CV se excluyen del ranking e informan una razón segura.
 - El CV original se guarda en almacenamiento local privado; la base de datos conserva su referencia y metadatos.
 - Los CVs se conservan indefinidamente hasta que un reclutador los lleve a la papelera. Desde allí cualquier reclutador puede restaurarlos durante 180 días. Después se eliminan permanentemente el archivo y datos procesados, manteniendo auditoría mínima.
-- Un CV en papelera queda excluido de reportes, rankings y búsqueda histórica.
+- Un CV en papelera queda excluido de nuevos reportes, rankings, análisis y búsqueda histórica; no puede descargarse. Los reportes ya terminados se conservan sin cambios.
 - Un administrador puede realizar eliminación definitiva inmediata por solicitud de privacidad. Sus apariciones históricas se anonimizan como “Candidato eliminado por privacidad”.
 
 ## 6. Ranking y análisis con IA
@@ -74,9 +74,9 @@ totalScore = mínimo entre 100 y mandatoryScore + optionalBonus
 El reporte muestra resumen, ranking completo, Top 5, puntajes obligatorio/opcional/total, requisitos no cumplidos o no demostrados, evidencias y estado de cada documento.
 
 - Un reclutador puede descargar el CV original autenticado; no existen enlaces públicos permanentes.
-- Puede filtrar por rango de puntaje, cumplimiento obligatorio, disponibilidad, documentos ignorados o evidencia insuficiente, y buscar por nombre, correo o habilidad.
+- Puede filtrar por rango de puntaje, cumplimiento obligatorio, advertencias o evidencia insuficiente. El filtro por disponibilidad y la busqueda por nombre, correo o habilidad se entregan con el directorio historico.
 - El estado operativo por candidato y reporte es humano y compartido: `PENDIENTE`, `EN_REVISION`, `PRESELECCIONADO` o `DESCARTADO`. No cambia el análisis ni se propaga a otras vacantes.
-- Se pueden exportar reportes a PDF y XLSX. Incluyen únicamente nombre, correo, ubicación, disponibilidad, puntajes y evidencias; excluyen teléfono, dirección, atributos sensibles y rutas/enlaces de CV. Cada exportación se audita.
+- Se pueden exportar reportes completos a PDF y XLSX. Incluyen únicamente nombre, correo, ubicación, disponibilidad, puntajes y evidencias; excluyen teléfono, dirección, atributos sensibles, estado humano y rutas/enlaces de CV. La disponibilidad es `DESCONOCIDO` mientras no se actualice el perfil compartido. Cada exportación se audita.
 
 ## 8. Directorio histórico
 
@@ -84,7 +84,7 @@ Cuando no existan candidatos que alcancen el umbral de la vacante, el sistema of
 
 - El reclutador define filtros: período de recepción, disponibilidad, habilidades/términos extraídos, ubicación cuando exista y puntaje mínimo respecto de la vacante actual.
 - El sistema sugiere 70 como puntaje mínimo, modificable por el reclutador.
-- Todos los reclutadores pueden actualizar disponibilidad (`DISPONIBLE`, `NO_DISPONIBLE`, `DESCONOCIDO`) y corregir datos extraídos del perfil. Se conserva el valor original, el cambio, usuario y fecha.
+- Todos los reclutadores pueden actualizar disponibilidad (`DISPONIBLE`, `NO_DISPONIBLE`, `DESCONOCIDO`) y corregir ubicación y habilidades extraídas del perfil. Se conserva el valor original, el cambio, usuario y fecha.
 - La corrección se aplica al perfil compartido y a búsquedas futuras; los reportes históricos no cambian.
 
 ## 9. Administración e integraciones

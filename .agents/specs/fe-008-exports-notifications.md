@@ -1,78 +1,108 @@
-# FE-008 - Exportaciones y notificaciones
+# FE-008 - Report Exports and Notifications
 
-## Objetivo
+## Objective
 
-Permitir solicitar y descargar exportaciones cuando estén listas, y consultar notificaciones in-app sin revelar datos sensibles.
+Add base full-report PDF/XLSX export and the authenticated in-app job-notification
+inbox. Availability is intentionally not part of exports in this increment.
 
-## Referencias
+## References
 
-- `docs/PRD.md`, secciones 4 y 7.
-- `docs/FRONTEND_PHASE_SPECS.md`, FE-008.
-- `docs/FRONTEND_ROADMAP.md`, FE-008.
-- `.agents/specs/015-secure-report-export.md` y `022-job-notifications.md`.
+- `docs/prd-008-report-filters-and-exports.md` export and audit rules.
+- `docs/prd-011-administration-audit-and-notifications.md` notification rules.
+- `docs/architecture.md` sections 7 and 9.
+- Frontend planning documents, FE-008; backend specs 015 and 022; FE-006.
 
-## Alcance
+## Scope
 
-### Incluido
+### Included
 
-- Solicitud de PDF/XLSX, estado, disponibilidad, expiración y descarga autenticada.
-- Bandeja in-app, lectura y navegación segura desde notificaciones.
+- Request, status, terminal download, failure, and expiry handling for complete
+  PDF/XLSX exports of a completed report.
+- In-app notification inbox, unread/read presentation, and mark-read action for
+  safe job completion, warning, and failure notifications.
 
-### Excluido
+### Excluded
 
-- Envío manual de correo, plantillas, enlaces públicos o generación de contenido de exportación.
+- Availability in filters/exports, profile data, historical search, filtered or
+  partial exports, manual email, templates, public links, CV exports, and admin
+  audit UI. FE-009 adds availability export value.
 
-## Comportamiento y reglas
+## UX Behavior
 
-- Una acción de exportación queda inhabilitada mientras su solicitud está pendiente para evitar duplicados.
-- La UI sólo habilita descarga cuando backend declara disponibilidad; expiración se presenta sin intentar recuperar recurso.
-- Notificaciones muestran únicamente el texto/metadata segura del DTO y se marcan leídas por API.
+- Export is explicitly labelled as the complete report regardless of active or
+  future screen filters. Disable duplicate request activation while pending;
+  display only API-safe queued/completed/failed/expired status and download when
+  available. Do not promise an expired/failed export can be recovered.
+- Notifications identify the vacancy and general job outcome only. Marking read
+  changes notification state, never job/report/candidate data. Inbox may poll via
+  its shared API utility until an approved push contract exists.
 
-## Contratos
+## API Contract Dependencies
 
-Usar OpenAPI 015 y 022 para solicitudes asíncronas, estado, descarga, listado y lectura de notificaciones.
+- Consume generated OpenAPI from backend specs 015 and 022 for export request,
+  status, authorized file delivery/expiry, notifications query, unread state, and
+  mark-read. No endpoint, export payload, retention time, or notification schema
+  is invented by frontend.
 
-## Datos y persistencia
+## Routes, State, Accessibility, and Responsive Design
 
-No guardar archivos, URLs de descarga ni contenido de notificación con PII en almacenamiento persistente.
+- Extend FE-006 report actions and add protected notification inbox/navigation.
+  Cover loading, empty, unread, request-pending, export terminal, expiry, retry,
+  denied, and session-expired states.
+- Export and read controls are keyboard-operable with live result status. The inbox
+  uses semantic list controls and mobile-friendly readable cards; distinguish
+  unread status without color alone.
 
-## Integraciones
+## Frontend Security and Privacy
 
-Correo y generación de exportación son server-side.
+- Never persist/export/cache/log export bytes, download URLs, CV data, candidate
+  details, notification payloads beyond rendered API fields, or audit information.
+  Download is authenticated and no permanent/public link is displayed.
 
-## Errores y estados
+## Configuration and Integrations
 
-Loading, solicitud pendiente, disponible, expirado, vacío, warning, retry y fallo seguro.
+- Reuse FE-001 API client; centralize notification polling rather than adding a
+  provider or email client. The SPA does not send email or manage mail delivery.
 
-## Seguridad y privacidad
+## Data, Persistence, Errors, and Observability
 
-Descargas sólo mediante endpoint autenticado; nunca enlaces públicos. No mostrar teléfono, dirección, rutas o atributos excluidos por exportación.
+- Keep export and inbox state ephemeral. Normalize safe `401`, `403`, `409`, and
+  terminal errors; telemetry excludes report/candidate/export/notification content.
 
-## Observabilidad
+## Manual Validation
 
-No registrar contenidos de notificación, nombre de archivo o datos exportados.
+- With synthetic reports/jobs, validate PDF and XLSX request/completion/download,
+  rapid double-click, failure/expiry, complete-export message despite filters,
+  safe anonymized export behavior, notification unread/read, job outcome messages,
+  authorization, keyboard, mobile, and slow network.
 
-## Estrategia de pruebas
+## Deferred Automation
 
-Componentes de estados, contrato OpenAPI y E2E de prevención de doble solicitud, disponibilidad, expiración, descarga y marcar leído.
+- Final stabilization: export state and inbox component tests, generated-contract
+  tests, E2E request/download/expiry/read flows, and accessibility/mobile tests.
 
-## Criterios de aceptación
+## Acceptance Criteria
 
-1. Una exportación no se solicita dos veces por doble interacción.
-2. Descargas disponibles usan autorización backend y no persisten URL/archivo.
-3. Notificaciones son accesibles, seguras y pueden marcarse leídas.
+1. A valid report can request and download one complete authenticated PDF or XLSX
+   export without a duplicate request from repeated activation.
+2. FE-008 exports exclude availability; FE-009 is the only increment that adds it.
+3. Notifications expose only a safe vacancy/general job outcome and can be marked
+   read without mutating job data.
+4. No export or notification UI reveals a public link, CV, sensitive candidate data,
+   or provider detail.
 
-## Riesgos y dependencias
+## Dependencies and Risks
 
-| Tipo | Detalle | Tratamiento |
-| --- | --- | --- |
-| BLOCKER | OpenAPI 015/022 y FE-006 no aprobados. | Bloquear implementación. |
+- Depends on FE-006 and backend 015/022 generated OpenAPI.
+- RISK: asynchronous export state/expiry and notification pagination contracts must
+  be available before implementation.
 
-## Decisiones / preguntas abiertas
+## Decisions / Open Questions
 
-- **ARCHITECTURAL DECISION:** Disponibilidad y expiración de exportación son autoridad backend.
+- ARCHITECTURAL DECISION: exports are full immutable reports and do not use UI
+  filters. Availability is deferred to FE-009.
+- BLOCKER: requires approval and generated OpenAPI from backend 015 and 022.
 
 ## Definition of Ready
 
-`BLOCKED`
-> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.
+`BLOCKED` - FE-006 plus approved backend 015/022 generated OpenAPI.

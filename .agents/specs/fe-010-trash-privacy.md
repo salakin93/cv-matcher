@@ -1,78 +1,110 @@
-# FE-010 - Papelera y privacidad
+# FE-010 - Trash and Privacy Deletion
 
-## Objetivo
+## Objective
 
-Permitir gestionar restauración de CVs en papelera y solicitudes ADMIN de eliminación por privacidad con explicaciones claras de retención e irreversibilidad.
+Add shared CV trash/restore views and the ADMIN-only immediate, irreversible
+privacy-deletion workflow with safe status feedback.
 
-## Referencias
+## References
 
-- `docs/PRD.md`, secciones 5 y 9.
-- `docs/FRONTEND_PHASE_SPECS.md`, FE-010.
-- `docs/FRONTEND_ROADMAP.md`, FE-010.
-- `.agents/specs/019-cv-trash-and-restore.md` a `021-privacy-deletion.md`.
+- `docs/prd-010-trash-and-privacy-deletion.md`.
+- `docs/architecture.md` sections 5, 6, and 9.
+- Frontend planning documents, FE-010; backend specs 019-021; FE-007 and FE-009.
 
-## Alcance
+## Scope
 
-### Incluido
+### Included
 
-- Lista de papelera, restauración, vencimiento y flujo ADMIN de eliminación por privacidad con confirmación fuerte y seguimiento de estado.
+- Move an eligible CV to shared trash, trash listing, retention/expiry display as
+  supplied by API, restore before expiry, and unavailable download state.
+- ADMIN privacy-deletion initiation with strong explicit confirmation, processing,
+  completed, and safe failed/blocked state display.
 
-### Excluido
+### Excluded
 
-- Recuperación tras purga, exposición de PII eliminada, exportación de papelera y descarga de archivos.
+- Restoration after purge/privacy deletion, PII recovery, trash export, recruiter
+  privacy deletion, selective profile deletion, score changes, or manual purge.
 
-## Comportamiento y reglas
+## UX Behavior
 
-- La papelera explica que los CVs quedan excluidos de reportes y búsquedas; restauración sólo se ofrece cuando backend lo permite dentro de 180 días.
-- Privacidad requiere confirmación fuerte definida por el contrato, muestra irreversibilidad y no promete reversión.
-- Después de eliminación, la UI elimina datos personales locales y presenta sólo el estado seguro/anónimo proporcionado por backend.
+- Trash actions clearly state future exclusion from downloads/reports/search and
+  that completed report versions remain unchanged. Restore is offered only when
+  the API says it is allowed; expired/purged entries never offer recovery.
+- Privacy deletion is visible only to ADMIN. Its confirmation plainly states
+  immediate irreversibility, scope across candidate data, and historical
+  anonymization. Completion is not shown until API confirms it; a safe failure
+  warns that access remains blocked without revealing personal/technical details.
 
-## Contratos
+## API Contract Dependencies
 
-Consumir OpenAPI 019-021 para papelera, restauración, vencimiento, solicitud/estado de privacidad y errores autorizados.
+- Consume generated OpenAPI from backend specs 019-021 for trash eligibility/list,
+  move/restore/expiry/purge state, privacy deletion target/confirmation/request,
+  processing/completion/failure, and resulting safe report presentation. Do not
+  invent endpoints, deletion identifiers, retention countdown, or purge behavior.
 
-## Datos y persistencia
+## Routes, State, Accessibility, and Responsive Design
 
-No almacenar referencias de archivo, rutas, PII eliminada ni confirmaciones persistentes.
+- Add protected trash routes/actions from report/profile contexts; mount privacy
+  deletion under ADMIN guard. Cover loading, empty, trashed, restorable, expired,
+  moving/restoring, confirmation, processing, completed, safe failure, denial,
+  and session expiry.
+- Destructive actions require accessible confirmation dialogs with explicit labels,
+  keyboard focus management, announced outcome, and no color-only irreversibility
+  cue. Mobile maintains distinct destructive/restore controls and readable dates.
 
-## Integraciones
+## Frontend Security and Privacy
 
-Purgas, archivos y anonimización son server-side.
+- Do not expose CV/document/profile internals, deletion evidence, storage paths,
+  or raw errors. On privacy deletion, immediately clear related in-memory views;
+  never cache, log, or retain deleted PII. Route guards do not replace backend ADMIN authorization.
 
-## Errores y estados
+## Configuration and Integrations
 
-Estados loading, vacía, restaurable, vencida, confirmación, procesando, completada, fallo seguro y retry sólo cuando API lo permita.
+- Reuse FE-001 API/auth and FE-007 protected-download state patterns. No client
+  file storage, purge scheduler, or secrets/configuration is introduced.
 
-## Seguridad y privacidad
+## Data, Persistence, Errors, and Observability
 
-- Cualquier reclutador autorizado usa papelera; sólo ADMIN ejecuta privacidad.
-- No renderizar ni registrar archivos, rutas, contenido de CV o PII tras eliminación.
+- All trash/privacy state is fetched from API and ephemeral. Normalize safe auth,
+  conflict, validation, and processing errors. Client telemetry must omit candidate
+  identifiers and deletion content.
 
-## Observabilidad
+## Manual Validation
 
-Sin datos de candidato, documento o solicitud en logs/telemetry de cliente.
+- With synthetic candidates/documents, validate trash exclusion/unavailable
+  download, shared restore before expiry, expired/purged no-restore state,
+  completed-report preservation, recruiter privacy denial, ADMIN strong
+  confirmation, processing/safe failure/completion, anonymized report rendering,
+  keyboard dialogs, mobile, and session loss.
 
-## Estrategia de pruebas
+## Deferred Automation
 
-Componentes de retención/confirmación, contrato y E2E de restauración, expiración, autorización ADMIN e irreversibilidad.
+- Final stabilization: destructive-dialog/state components, generated-contract
+  tests, E2E trash/restore/privacy processing, cache-clearing/privacy assertions,
+  and accessibility/responsive coverage.
 
-## Criterios de aceptación
+## Acceptance Criteria
 
-1. Papelera y restauración reflejan exactamente disponibilidad y vencimiento backend.
-2. Privacidad requiere confirmación explícita y sólo ADMIN puede iniciarla.
-3. La interfaz no conserva ni vuelve a mostrar PII eliminada.
+1. Trashed CVs are presented as unavailable for download and future operations,
+   while completed report versions remain visible as API returns them.
+2. Restore is available only before API-defined expiry; no UI promises recovery
+   after purge.
+3. Only ADMIN can initiate clearly irreversible privacy deletion.
+4. Privacy deletion completion clears in-memory PII and renders historical entries
+   only as safely anonymized API data.
 
-## Riesgos y dependencias
+## Dependencies and Risks
 
-| Tipo | Detalle | Tratamiento |
-| --- | --- | --- |
-| BLOCKER | OpenAPI 019-021 y FE-007/FE-009 no aprobados. | Bloquear implementación. |
+- Depends on FE-007, FE-009, and backend 019-021 generated OpenAPI.
+- RISK: API must provide safe asynchronous privacy status and anonymized report
+  response without identifiers that allow stale UI data to be retained.
 
-## Decisiones / preguntas abiertas
+## Decisions / Open Questions
 
-- **ARCHITECTURAL DECISION:** Purga y anonimización son irreversibles y controladas por backend.
+- ARCHITECTURAL DECISION: retention, purge, privacy scope, and access blocking are
+  backend authority; the SPA communicates but does not emulate them.
+- BLOCKER: requires approval and generated OpenAPI from backend 019-021.
 
 ## Definition of Ready
 
-`BLOCKED`
-> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.
+`BLOCKED` - FE-007/FE-009 plus approved backend 019-021 generated OpenAPI.

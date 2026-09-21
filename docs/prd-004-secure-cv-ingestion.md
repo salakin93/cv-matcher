@@ -175,9 +175,10 @@ El reclutador no puede ver nombres, hashes, rutas, archivos, IDs Outlook, datos
 | Se alcanzo limite de adjuntos o bytes, pero hay CVs validos | Continua con advertencia de alcance parcial. |
 | El job se cancela | Se detiene de forma segura y no publica reporte ni ranking. |
 
-## Cambios Requeridos en Spec 007
+## Cambios Reflejados en Spec 007
 
-La Spec 007 tecnica debe actualizarse antes de implementar o cerrar su revision:
+Los siguientes cambios ya están reflejados en la Spec 007 técnica y no bloquean
+su implementación ni revisión:
 
 - Usar nombre temporalmente como filtro inicial.
 - Solicitar nombre del adjunto a Graph sin persistirlo.

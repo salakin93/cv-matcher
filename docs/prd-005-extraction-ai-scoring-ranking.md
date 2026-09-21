@@ -33,16 +33,17 @@ La identidad se resuelve en este orden:
 
 1. Correo extraido del texto del CV.
 2. Correo remitente del mensaje, solo si no existe correo valido en el CV.
-3. Nombre extraido del CV, solo para mostrar identidad, no para deduplicar.
+3. Nombre extraido del CV normalizado, solo si no existe un correo valido.
 
 ### Reglas
 
 - Correo y nombre se conservan cifrados.
 - No se exponen remitente, hashes, IDs Outlook ni fuentes internas de identidad.
 - Dos CVs con el mismo correo se consideran la misma persona.
+- Si no existe correo extraido ni correo remitente, dos CVs con el mismo nombre
+  normalizado se consideran la misma persona.
 - Para una misma persona se usa el CV mas reciente.
 - Si las fechas de dos CVs empatan, se usa un identificador interno estable.
-- Dos CVs sin correo nunca se fusionan solo por tener el mismo nombre.
 - Un CV sin correo ni nombre util entra como `Candidato anonimo`.
 - Varios candidatos anonimos aparecen como entradas separadas, una por documento.
 
@@ -84,7 +85,7 @@ Si una respuesta es invalida, no se guarda parcialmente.
 | Caso | Resultado |
 | --- | --- |
 | Claude responde correctamente | El documento queda analizado. |
-| Error temporal, rate limit o timeout | El sistema reintenta de forma controlada. |
+| Error temporal, rate limit o timeout | El sistema usa timeout de 30 segundos y reintenta hasta tres veces; en `Retry-After` espera como maximo 60 segundos por reintento. |
 | Claude devuelve respuesta invalida | El documento queda con advertencia segura. |
 | Claude bloquea contenido | El documento queda con advertencia segura. |
 | Algunos CVs fallan, otros son validos | El reporte se genera con advertencias y solo incluye candidatos evaluados. |
@@ -183,15 +184,16 @@ El reporte nunca muestra:
 - Prompt, payload Claude ni secretos.
 - Datos tecnicos de almacenamiento.
 
-## Cambios Requeridos en Fuentes Actuales
+## Cambios Reflejados en Fuentes Actuales
 
-Antes de implementar, actualizar las fuentes tecnicas y de producto:
+Los siguientes cambios ya están reflejados en las fuentes técnicas y de producto
+indicadas y no bloquean la implementación ni revisión:
 
 - PRD y Spec 012: sin candidatos rankeables termina `COMPLETED_WITH_WARNINGS`,
   no `FAILED`.
 - Spec 009: Claude recibe texto minimizado sin identificadores.
-- Spec 011: no deduplicar por nombre; candidatos sin identidad entran como
-  anonimos independientes.
+- Spec 011: deduplicar por correo extraido, correo remitente o nombre
+  normalizado; candidatos sin identidad entran como anonimos independientes.
 - Specs 008-012: reflejar conteos, advertencias y comportamiento de CVs sin
   texto util.
 

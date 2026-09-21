@@ -1,202 +1,69 @@
-# 014 - Protected CV Download
+# 014 - Protected CV download
+
+## Estado
+`DRAFT_FOR_APPROVAL` — backend only; PRD 007; depends on 007, 012 and 013.
 
 ## Objetivo
-
-Entregar descarga autenticada, autorizada y auditada del CV original
-seleccionado para una entrada de reporte. El backend descifra y transmite el
-archivo desde almacenamiento privado sin enlaces públicos, rutas, storage keys
-ni PII adicional. No exporta reportes, no altera documentos y no habilita acceso
-al directorio fuera de un reporte.
+Entregar únicamente el archivo original que una entrada de reporte usó, mediante una autorización autenticada y limitada.
 
 ## Referencias
-
-- `docs/PRD.md`, secciones 5 y 7.
-- `docs/PRODUCT_BACKLOG.md`, Epic 4, Feature 4.3.
-- `docs/architecture.md`, secciones 5, 6, 9 y 11.
-- `.agents/context/project.md` y `.agents/context/constraints.md`.
-- Specs 007, 012 y 013.
+`docs/prd-007-protected-cv-download.md`, `docs/architecture.md` §§5–6, 9.
 
 ## Alcance
-
 ### Incluido
-
-- Endpoint de descarga del documento seleccionado de un candidato de reporte.
-- Autorización de `RECRUITER`/`ADMIN` con sesión persistida vigente.
-- Descifrado AES-GCM streaming desde storage privado, con verificación de
-  integridad y headers seguros de descarga.
-- Auditoría obligatoria de cada descarga efectiva y métricas sin PII.
-- Límite server-side de descargas, prevención de path traversal y manejo de
-  documento ausente/cuarentenado/eliminado de forma segura.
-- OpenAPI, errores JSON seguros y pruebas de streaming con storage temporal.
-
+- Descarga autenticada desde la relación exacta reporte-versión/entrada y límite de 20 descargas efectivas por usuario en ventana móvil de 10 minutos.
+- Verificación de ciclo de vida documental, streaming seguro y auditoría al completar.
 ### Excluido
+- URLs firmadas o públicas, descarga por perfil/documento, previsualización, reemplazo, exportación o cambios al reporte.
 
-- Enlaces permanentes o prefirmados, acceso público, proxy de archivos externo,
-  CDN público, subida, edición o reemplazo de CV.
-- Descarga de documentos no seleccionados, acceso por profile/document UUID,
-  directorio histórico, papelera, privacidad y exportación PDF/XLSX.
-- UI React, envío por correo, notificaciones, análisis, ranking o cambios de
-  estado humano.
+## Comportamiento y reglas
+- Sólo se entrega el `candidate_document` fijado por la entrada de esa versión; nunca el CV más reciente del perfil.
+- Antes de abrir bytes se comprueba que no esté en papelera, purgado, bloqueado por privacidad, corrupto o no disponible. La cuota se consume sólo tras completar el stream sin error de salida.
+- La respuesta conserva el MIME validado PDF/DOCX y usa un nombre de descarga genérico (`cv.pdf`/`cv.docx`), no el nombre original.
 
-## Decisiones arquitectónicas
+## Contratos
+- `GET /api/v1/report-versions/{reportVersionId}/candidates/{reportCandidateId}/document` responde `200` como `application/pdf` o MIME DOCX con `Content-Disposition: attachment`; sin JSON envolvente.
+- `429 DOWNLOAD_RATE_LIMITED` incluye `Retry-After` en segundos y mensaje seguro. `404 DOCUMENT_NOT_AVAILABLE` cubre ausencia, papelera, purga, bloqueo o fallo de integridad para no distinguir estados sensibles.
+- `401`, `403` y `404` usan el contrato uniforme cuando no se puede autorizar el recurso.
 
-1. La ruta se ancla a `report_version` y `report_candidate`; no hay endpoint
-   general por `candidate_document_id` ni `storage_key`. Así la autorización se
-   limita a un resultado de reporte accesible al actor.
-2. `document` es dueño del cifrado/storage y expone un puerto de streaming
-   autorizado. `reporting` verifica pertenencia versión-candidato y solicita el
-   stream; nunca construye rutas ni descifra bytes.
-3. El archivo se descifra en streaming a memoria/buffer acotado. Nunca se crea
-   archivo temporal claro, nunca se carga el CV entero sin límite y se cierra el
-   stream ante desconexión del cliente.
-4. La descarga no cambia score, ranking, perfil, estado humano ni documento.
-   Se registra como acceso sensible independiente de eventos de reporte.
-5. El nombre de archivo público se genera de modo seguro y no revela ruta ni
-   datos no autorizados: `cv-{reportCandidateId}.{pdf|docx}`.
+## Configuración centralizada
+Añadir `document.download-rate-limit` a `application.yml` y `DocumentProperties`: fijo por defecto `20` eventos completados / `PT10M`; perfiles pueden modificar los valores operativos, no ADMIN.
 
-## Modelo y persistencia
+## Datos y persistencia
+- Flyway: tabla `document_download_attempt` con UUID, `user_id`, UTC, resultado `RESERVED|COMPLETED`, `reservation_expires_at` y referencias internas de reporte/entrada/documento; índice `(user_id, created_at)` para cuota. No persistir IP, nombre, ruta ni bytes.
+- El módulo `reporting` resuelve la entrada y llama al puerto `document.openOriginalForAuthorizedDownload(documentId)`; `document` descifra y verifica fuera de controladores. Ningún módulo consulta tablas ajenas directamente.
+- Antes de abrir bytes, reservar transaccionalmente un cupo; la cuota cuenta reservas vigentes y completadas en la ventana. Tras stream completo, convertir reserva a `COMPLETED` y registrar `CV_DOWNLOADED`; un stream fallido libera su reserva.
 
-Crear exclusivamente `V15__protected_cv_download.sql`; no modificar V1–V14.
+## Integraciones
+Almacenamiento privado cifrado a través del módulo `document`; no hay enlaces ni proveedor de navegador.
 
-### `document_access_event`
+## Errores y estados
+- Integridad, descifrado o archivo ausente: no enviar bytes, registrar fallo técnico seguro y devolver `404 DOCUMENT_NOT_AVAILABLE`.
+- El límite se calcula transaccionalmente para solicitudes concurrentes; la vigésima permitida y posteriores dentro de la ventana no pueden exceder el máximo.
 
-| Columna | Regla |
-| --- | --- |
-| `id` | UUID PK. |
-| `candidate_document_id` | UUID de documento, no expuesto por API. |
-| `report_version_id`, `report_candidate_id` | UUIDs de contexto de autorización. |
-| `actor_user_id` | UUID no nulo del solicitante. |
-| `action` | Sólo `CV_DOWNLOADED`. |
-| `correlation_id` | UUID nullable. |
-| `created_at` | `timestamptz` UTC. |
+## Seguridad y privacidad
+- Requiere bearer válido y `RECRUITER` o `ADMIN`; validar versión y entrada antes de resolver documento para evitar IDOR.
+- Deshabilitar cache compartida (`Cache-Control: no-store, private`), no redirigir y no exponer ruta, hash, nombre original o claves.
+- Auditoría mínima sólo para descarga efectiva: actor, UTC, acción y referencias internas.
 
-No guardar IP, user agent, nombre, correo, hash, tamaño, ruta, storage key ni
-resultado de descifrado. Índice por `report_candidate_id, created_at desc` sólo
-para futura auditoría administrativa, no expuesta en esta spec.
-
-## Contrato API
-
-| Método y ruta | Respuesta |
-| --- | --- |
-| `GET /api/v1/report-versions/{reportVersionId}/candidates/{reportCandidateId}/document` | `200` stream PDF/DOCX con `Content-Disposition: attachment`. |
-
-Requiere bearer JWT válido, cuenta `ACTIVE`, sesión persistida y rol efectivo
-`RECRUITER` o `ADMIN`. Respuesta exitosa fija `Content-Type` a
-`application/pdf` o al tipo DOCX oficial, `X-Content-Type-Options: nosniff`,
-`Cache-Control: no-store, private` y no incluye URL/ruta/tokens. No soporta
-range requests, query params, redirecciones ni cookies de autenticación como
-único factor.
-
-## Reglas de negocio
-
-1. El candidato debe pertenecer exactamente a la versión indicada y su documento
-   seleccionado debe estar `AVAILABLE`. Relación inexistente o no accesible es
-   `404 REPORT_CANDIDATE_NOT_FOUND` sin revelar documento.
-2. Sólo se descarga el original seleccionado por `job_candidate_selection` y
-   snapshot de `report_candidate`. Documentos alternativos del perfil no son
-   alcanzables por esta API.
-3. Antes de emitir headers, `document` valida formato permitido, storage key
-   opaca dentro de raíz privada, ciphertext AES-GCM, tag y hash. Cualquier fallo
-   cierra stream y responde `409 DOCUMENT_UNAVAILABLE` si no se entregó byte.
-4. Si ya comenzó la respuesta y falla el stream, abortar conexión, registrar
-   error técnico sin PII y no intentar escribir JSON dentro de contenido binario.
-5. Tras validar stream y antes de emitir headers/cuerpo, insertar `CV_DOWNLOADED`
-   de forma transaccional breve. Si la auditoría falla no se transmite el archivo.
-   Reintentos HTTP del usuario generan eventos separados porque representan
-   solicitudes de acceso distintas.
-6. Aplicar límite fijo configurable de 20 descargas por actor por ventana de 10
-   minutos. Exceder devuelve `429 DOWNLOAD_RATE_LIMITED` sin identificar otros
-   accesos; límite se implementa server-side y no es configurable por cliente.
-7. Documento `IGNORED`, `QUARANTINED`, eliminado, sin storage o con clave de
-   cifrado inválida nunca se transmite, aunque existan reportes históricos.
-
-## Errores y seguridad
-
-| Situación | HTTP / código |
-| --- | --- |
-| JWT inválido, revocado o cuenta no activa | `401 UNAUTHENTICATED` |
-| Rol no autorizado | `403 FORBIDDEN` |
-| Reporte/candidato/relación inexistente | `404 REPORT_CANDIDATE_NOT_FOUND` |
-| Documento no disponible o integridad inválida | `409 DOCUMENT_UNAVAILABLE` |
-| Límite de descarga excedido | `429 DOWNLOAD_RATE_LIMITED` |
-
-- Los errores previos a stream usan JSON común con correlation ID. Nunca incluyen
-  ruta, storage key, nombre original, hash, cifrado, PII, token ni stacktrace.
-- No interpolar IDs en rutas filesystem; validar UUID y usar referencias opacas
-  resueltas por `document` contra una raíz canónica privada.
-- Logs no incluyen nombre, correo, URL, tamaño, bytes, hash, documento o actor.
-  Métricas no contienen UUID, candidato, reporte, usuario o formato como etiqueta.
-
-## Auditoría y observabilidad
-
-Cada descarga efectiva crea `CV_DOWNLOADED` en `audit_event`, además de
-`document_access_event`, con actor, objetivo `CANDIDATE_DOCUMENT`, timestamp y
-correlation ID. No registrar PII o referencia de storage.
-
-Métricas sin PII:
-
-- `documents.downloads` con `outcome` (`success`, `unavailable`, `rate_limited`);
-- `documents.download_duration` sin etiquetas identificables;
-- `documents.download_stream_failures` sin nombre/ruta/UUID como etiqueta.
-
-## OpenAPI y configuración
-
-- Documentar stream binario, bearer, `200`, `401`, `403`, `404`, `409`, `429`,
-  headers de seguridad y que no existen enlaces públicos.
-- Propiedades server-side: límite/ventana, tamaño máximo de stream, storage root,
-  claves/versiones de cifrado y timeouts. Fallar rápido si storage/clave faltan.
-- `test` usa archivos sintéticos cifrados y storage temporal privado; no CV real,
-  URL externa, key real ni integración Graph.
+## Observabilidad
+Contadores de completadas, bloqueadas por cuota y no disponibles; logs con correlationId, IDs internos y código, sin encabezados sensibles ni PII.
 
 ## Estrategia de pruebas
-
-### Unitarias
-
-- Autorización de relación reporte-candidato y rechazo de documento alternativo.
-- Resolución de storage opaco, path traversal, tag/hash inválido y headers seguros.
-- Stream acotado, abort por error, nombre público generado y rate limiter.
-
-### Integración Spring/PostgreSQL Testcontainers
-
-- `RECRUITER`/`ADMIN` con sesión vigente descargan bytes sintéticos correctos;
-  no bearer `401`, no autorizado `403`, relación incorrecta `404`.
-- Respuesta no contiene ruta/ID interno; headers evitan cache/sniff y no redirige.
-- Documento cuarentenado/ausente/integridad inválida no transmite bytes y retorna
-  `409` seguro; reintentos exitosos generan auditoría por acceso efectivo.
-- Límite `429`, concurrencia de descargas y falla de stream no filtran PII ni
-  dejan recursos abiertos; V15 desde V1–V14, OpenAPI y regresión completa.
+### Validación manual
+- Descargar PDF y DOCX de una entrada válida; comprobar MIME, nombre genérico, auditoría y que no cambia el reporte.
+- Intentar con sesión ausente, rol no permitido, UUID cruzados, documento en papelera y 21 solicitudes en 10 minutos.
+### Backlog de automatización diferida
+- Integración de stream cifrado e integridad; API de autorización/IDOR/cache; concurrencia de rate limit; auditoría sólo tras stream completado.
 
 ## Criterios de aceptación
-
-1. Sólo `RECRUITER`/`ADMIN` activos con sesión vigente descargan el CV seleccionado;
-   sin bearer es `401` y rol no autorizado `403` seguro.
-2. Ruta exige relación exacta versión-candidato; nunca permite descargar por
-   documento/perfil/storage key ni acceder a CV alternativo.
-3. Archivo se transmite desde storage privado cifrado, validando tag/hash/tipo,
-   sin archivo temporal claro, enlace público, redirect o ruta expuesta.
-4. Headers fuerzan attachment, tipo seguro, `nosniff` y `no-store, private`.
-5. Documento no disponible/cuarentenado/integridad inválida no transmite bytes y
-   devuelve `409 DOCUMENT_UNAVAILABLE` sin detalles sensibles.
-6. Cada acceso efectivo se audita sin PII; reintentos son eventos distintos y no
-   cambian reporte, score, perfil, documento o estado humano.
-7. Límite server-side devuelve `429` sin filtrar otros accesos ni aceptar control
-   de cliente.
-8. Logs, OpenAPI, métricas y errores no exponen nombre original, correo, ruta,
-   hash, storage key, token, CV ni UUID como etiqueta.
-9. V15 y Testcontainers cubren autorización, streaming, cifrado, integridad,
-   rate limit, auditoría y errores sin exportación, UI o directorio.
+- AC-007-01 a AC-007-06 se cumplen; sólo se sirve el documento usado por la entrada y nunca existe URL reutilizable.
 
 ## Riesgos y dependencias
+- Depende de los estados de documento de 007/008, snapshot de 012 y auditoría. El comportamiento tras papelera depende de 019.
 
-| Tipo | Detalle | Tratamiento |
-| --- | --- | --- |
-| Dependencia | Spec 007 aporta documento privado cifrado. | Usar `document` streaming port. |
-| Dependencia | Spec 012 aporta selección/reporte. | Anclar autorización a entrada de reporte. |
-| Riesgo | CV se filtra por path o cache. | Storage opaco, headers y no-store. |
-| Riesgo | Descargas automatizadas. | Rate limit y auditoría por acceso. |
-| Dependencia futura | Exportación/directorio siguen fuera. | No crear rutas o enlaces adyacentes. |
+## Decisiones / preguntas abiertas
+- `ARCHITECTURAL DECISION`: el contador de cuota registra sólo streams completados, pero su reserva transaccional evita superar el límite concurrentemente.
 
 ## Definition of Ready
-
 `READY_FOR_DEV`
-> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.

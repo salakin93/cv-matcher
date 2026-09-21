@@ -15,7 +15,7 @@ Principios obligatorios:
 - reglas de score y ranking deterministas en backend;
 - mínimo privilegio, minimización de datos y secretos fuera del repositorio;
 - procesos durables e idempotentes para operaciones largas;
-- contratos versionados y pruebas automatizadas antes de integrar.
+- contratos versionados y validacion manual documentada antes de integrar; la automatizacion diferida se ejecuta en la estabilizacion final.
 
 ## 2. Topología
 
@@ -132,13 +132,13 @@ Estados mínimos: `QUEUED`, `DISCOVERING`, `INGESTING_DOCUMENTS`, `ANALYZING`, `
 
 - Una sola conexión Outlook compartida, administrada por `ADMIN`.
 - OAuth 2.0 Authorization Code + PKCE en backend confidencial, con callback backend, `offline_access`, y refresh token cifrado en DB. El refresh token rotado se reemplaza atómicamente y nunca llega al navegador.
-- La conexión OAuth inicial solicita sólo `openid`, `profile` y `offline_access`; valida el `id_token` mediante OIDC discovery/JWKS sin llamar Microsoft Graph. El permiso de Inbox no se solicita hasta una spec aprobada de descubrimiento; esa spec debe justificar y validar el permiso mínimo exacto antes de listar mensajes. [Microsoft Graph: listar mensajes](https://learn.microsoft.com/en-us/graph/api/mailfolder-list-messages?view=graph-rest-1.0)
-- El descubrimiento solicita `Mail.ReadBasic`. La descarga de adjuntos de mensajes
-  requiere `Mail.Read`; se incorpora sólo en la spec de ingesta documental y
-  exige reautorización explícita por un administrador. Workers no elevan scopes
-  ni reintentan una conexión sin consentimiento.
+- La conexión OAuth inicial solicita `openid`, `profile`, `offline_access` y
+  `Mail.Read`, el permiso minimo aprobado para descubrir mensajes y descargar
+  adjuntos. Valida el `id_token` mediante OIDC discovery/JWKS sin exponer
+  credenciales al navegador. Workers no elevan scopes ni reintentan una conexión
+  sin consentimiento. [Microsoft Graph: listar mensajes](https://learn.microsoft.com/en-us/graph/api/mailfolder-list-messages?view=graph-rest-1.0)
 - Se consulta sólo Inbox, por rango UTC inclusivo, paginado, con campos mínimos y el header `Prefer: IdType="ImmutableId"` en cada petición relevante. Microsoft exige el header en cada solicitud para usar IDs inmutables de forma consistente. [IDs inmutables de Outlook](https://learn.microsoft.com/en-us/graph/outlook-immutable-id)
-- Timeouts explícitos, máximo tres reintentos para errores transitorios, respeto de `429 Retry-After`, límites de mensajes, adjuntos y bytes definidos por spec.
+- Timeouts explícitos, máximo tres reintentos para errores transitorios, respeto de `429 Retry-After`, limite de 1000 mensajes por job y límites de adjuntos y bytes definidos por spec.
 - La expiración, revocación o falta de consentimiento exige reconexión por administrador. Los refresh tokens deben protegerse y el anterior debe descartarse al obtener uno nuevo. [Refresh tokens de Microsoft](https://learn.microsoft.com/en-us/entra/identity-platform/refresh-tokens)
 
 ### 8.2 Claude
@@ -148,6 +148,7 @@ Estados mínimos: `QUEUED`, `DISCOVERING`, `INGESTING_DOCUMENTS`, `ANALYZING`, `
 - Se envía únicamente texto extraído necesario y requisitos de la vacante. No se incluyen tokens, secretos, rutas, headers, contenido del email ni metadatos no necesarios.
 - La respuesta debe ajustarse a un esquema JSON estricto por requisito. Se valida tamaño, campos, rangos 0–100, identificadores de requisito y evidencia antes de persistirla.
 - El texto del CV es contenido no confiable: no puede modificar instrucciones del sistema, ejecutar acciones, cambiar requisitos ni decidir contratación, score total o ranking.
+- Cada llamada Claude tiene timeout de 30 segundos. Errores transitorios o `429` se reintentan como maximo tres veces y un `Retry-After` no espera mas de 60 segundos por intento.
 
 ### 8.3 Correo de producto
 
@@ -222,6 +223,11 @@ No se declara rollback automático de datos. Cada spec con migraciones debe docu
 | ARCHITECTURAL DECISION | Integraciones | Adaptadores server-side, dobles en pruebas y sin llamadas reales. |
 | ARCHITECTURAL DECISION | Límites internos | Los módulos consumen puertos y contratos propios; no dependen de tipos anidados de servicios concretos ni acceden directamente a tablas de otro módulo. Auditoría, errores HTTP y correlation ID usan componentes compartidos. |
 | ARCHITECTURAL DECISION | Correo transaccional | El outbox durable es el único punto de salida para correo originado por mutaciones confirmadas. |
+| ARCHITECTURAL DECISION | Limites de extraccion | PDF: maximo 50 paginas; PDF/DOCX: maximo 100000 caracteres extraidos y 15 segundos por documento. Son configuracion externa por entorno, no parametros ADMIN. |
+| ARCHITECTURAL DECISION | Overlays de reporte | Estado humano pertenece a `report_candidate` mutable y versionado. Disponibilidad pertenece al perfil compartido, inicia `DESCONOCIDO` y se resuelve dinámicamente para filtros/exportaciones; ninguno modifica el snapshot/ranking inmutable. |
+| ARCHITECTURAL DECISION | Búsqueda histórica | Es un `HISTORICAL_SEARCH` distinto que consume una confirmación durable, procesa como máximo 500 CVs elegibles más recientes y publica como máximo una versión combinada inmutable con predecessor al reporte origen. |
+| ARCHITECTURAL DECISION | Privacidad | La eliminación selecciona un perfil exacto o un documento anónimo exacto. Bloquea acceso inmediatamente y sólo declara éxito cuando archivo y datos personales se borraron y reportes se anonimizaron; un fallo persistente mantiene el bloqueo. |
+| ARCHITECTURAL DECISION | Configuración operativa | Sólo ADMIN puede cambiar modelo AI allowlisted y concurrencia global. La concurrencia es un entero persistido de 1 a 10, con valor inicial 1, aplicado sólo a claims/jobs futuros. |
 | RISK | Outlook | Registro de Entra, redirect URI, consentimiento y vigencia del secret deben estar configurados antes del incremento Graph. |
 | RISK | Correo | SMTP/dominio remitente debe estar disponible antes de activar flujos reales de verificación, recuperación o notificación. |
 | RISK | Privacidad | Antes de producción, el responsable debe confirmar base legal, aviso de privacidad, acceso de Anthropic a texto de CV y política de backup/purga. |

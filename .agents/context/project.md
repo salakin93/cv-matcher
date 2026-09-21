@@ -4,7 +4,9 @@
 
 CV Matcher is a web application that helps a recruitment team review CVs received in a shared Outlook Inbox. It analyzes candidates against vacancy requirements and produces explainable rankings. The system supports human decisions; it never automatically hires or rejects a person.
 
-The authoritative functional source is `docs/PRD.md`. The delivery backlog is `docs/PRODUCT_BACKLOG.md`.
+The authoritative functional source is `docs/PRD.md` together with the refined
+`docs/prd-001-*.md` through `docs/prd-011-*.md`; a refined PRD prevails when it
+conflicts with the general PRD. The delivery backlog is `docs/PRODUCT_BACKLOG.md`.
 
 ## Users and access
 

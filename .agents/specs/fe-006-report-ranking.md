@@ -1,78 +1,106 @@
-# FE-006 - Reportes y ranking
+# FE-006 - Report Ranking
 
-## Objetivo
+## Objective
 
-Presentar versiones inmutables de reporte, ranking, puntajes, assessments, evidencias y advertencias exactamente como los entrega backend.
+Render immutable completed report versions in Spanish, including the backend
+ranking, Top 5, scores, per-requirement assessments, threshold, and safe warnings.
 
-## Referencias
+## References
 
-- `docs/PRD.md`, secciones 6 y 7.
-- `docs/FRONTEND_PHASE_SPECS.md`, FE-006.
-- `docs/FRONTEND_ROADMAP.md`, FE-006.
-- `.agents/specs/009-structured-cv-analysis.md` a `012-immutable-report-ranking.md`.
+- `docs/prd-005-extraction-ai-scoring-ranking.md` sections 6 through 10.
+- `docs/architecture.md` sections 7 and 9.
+- Frontend planning documents, FE-006; backend specs 009-012; FE-004.
 
-## Alcance
+## Scope
 
-### Incluido
+### Included
 
-- Lista de versiones, detalle, Top 5, ranking paginado, assessments, evidencias y warnings.
-- Filtros y búsqueda definidos por el contrato de reporte.
+- Report-version navigation, report summary, backend ranking and Top 5, candidate
+  identity permitted by API, score breakdown, assessments/evidence/explanations,
+  threshold indicator, and safe warning/empty states.
 
-### Excluido
+### Excluded
 
-- Editar score, ordenar o desempatar en cliente, exportar, descargar CV y cambiar estado humano.
+- Filter controls, human status, CV download, exports, availability, profile
+  editing, historical search, trash, and any score/ranking mutation.
 
-## Comportamiento y reglas
+## UX Behavior
 
-- Score total, mandatory score, bonus, orden, empates y estados de requisito se renderizan como API; no se recalculan.
-- `NO_DEMOSTRADO` permanece visible y se distingue de `NO_CUMPLE`.
-- Cada versión se identifica como inmutable; warnings son seguros y no contienen datos de documento/proveedor fuera del DTO autorizado.
+- Render candidate order, rank, scores, threshold, Top 5, identity confidence,
+  `CUMPLE`, `NO_CUMPLE`, and `NO_DEMOSTRADO` exactly as returned. The threshold
+  is informational and does not hide candidates.
+- Distinguish a completed report with safe warnings from a completed-with-warnings
+  job that has no report because no candidate was rankable. Never present an empty
+  ranking as a report result when API says no report exists.
+- Use progressive disclosure for assessment evidence/explanation while retaining
+  the complete API result. Do not offer editing, sorting, or recalculation.
 
-## Contratos
+## API Contract Dependencies
 
-Usar OpenAPI aprobado de 009-012 para versiones, resumen, ranking, filtros, assessments, evidencias y paginación.
+- Consume generated OpenAPI from backend specs 009-012 for immutable report
+  versions, summaries, ordered entries, Top 5, scores, assessments, threshold,
+  safe warnings, and job-to-report navigation. Do not invent report endpoints or
+  derive scores, ties, rank, candidate identity, or absence-of-report semantics.
 
-## Datos y persistencia
+## Routes, State, Accessibility, and Responsive Design
 
-No persistir resultados, evidencias ni PII de candidatos en caché durable.
+- Add protected report/version routes from FE-004 terminal navigation. State
+  covers loading, report absent, empty permitted collection, warnings, retry,
+  denied, and expired session.
+- Use semantic tables or labelled responsive equivalents, descriptive score text
+  in addition to color, keyboard-operable evidence disclosure, announced warning
+  state, and focus-preserving version navigation. On mobile, show rank/name/total
+  score first and allow accessible detail expansion without clipped data.
 
-## Integraciones
+## Frontend Security and Privacy
 
-No llama Claude, Graph ni almacenamiento de documentos.
+- Render only identity, assessments, and evidence returned by the report contract.
+  Never render CV/text extraction, sender data, prompts, provider payloads, hashes,
+  storage paths, internal IDs, tokens, or raw error bodies; do not log report data.
 
-## Errores y estados
+## Configuration and Integrations
 
-Loading, vacío, paginación, warning, retry y error seguro para cada vista.
+- Reuse the FE-001 generated API client and FE-004 report navigation. No provider
+  call, scoring library, client-side ranking logic, or new configuration is added.
 
-## Seguridad y privacidad
+## Data, Persistence, Errors, and Observability
 
-Rutas autenticadas. No incluir PII, evidencias o resultados en URL, logs o telemetry; no mostrar archivos ni rutas.
+- Report state is read-only and ephemeral. Normalize API errors; `401` clears
+  protected data. Client events contain only safe technical labels/correlation IDs.
 
-## Observabilidad
+## Manual Validation
 
-Sólo eventos técnicos agregados sin identificadores de candidato o contenido de evidencia.
+- With synthetic reports, validate backend order/ties, fewer than five entries,
+  threshold indicator, all assessment states, safe warnings, anonymized candidate
+  label, no-rankable/no-report job outcome, keyboard/reader behavior, mobile, and
+  denial/expired session.
 
-## Estrategia de pruebas
+## Deferred Automation
 
-Componentes de ranking/assessments, contrato OpenAPI, E2E de versión, filtros, paginación y estados `NO_DEMOSTRADO`.
+- Final stabilization: report rendering and disclosure component tests, generated-
+  contract tests, E2E terminal-job-to-report flow, sorting-regression tests, and
+  accessibility/responsive visual coverage.
 
-## Criterios de aceptación
+## Acceptance Criteria
 
-1. Ranking y Top 5 respetan orden y puntajes backend.
-2. La UI no calcula ni altera análisis, score o desempates.
-3. Versiones, warnings, evidencias y estados son accesibles y seguros.
+1. The display matches backend rank, scores, tie outcomes, and Top 5 without
+   frontend calculation or reorder.
+2. `NO_DEMOSTRADO` candidates remain visible and are distinguishable from
+   `NO_CUMPLE`.
+3. Safe warning and no-rankable terminal outcomes are accurately distinguished.
+4. The screen exposes no excluded CV, provider, storage, or internal data.
 
-## Riesgos y dependencias
+## Dependencies and Risks
 
-| Tipo | Detalle | Tratamiento |
-| --- | --- | --- |
-| BLOCKER | OpenAPI de resultados 009-012 y FE-004 pendientes. | Bloquear implementación. |
+- Depends on FE-004 and backend 009-012 generated OpenAPI.
+- RISK: report list/version and no-report terminal response shapes must be published.
 
-## Decisiones / preguntas abiertas
+## Decisions / Open Questions
 
-- **ARCHITECTURAL DECISION:** Respuestas de Claude ya validadas son datos renderizables; el cliente no las interpreta como instrucciones.
+- ARCHITECTURAL DECISION: backend is the sole authority for report ordering and
+  scoring; the SPA is a read-only renderer in this increment.
+- BLOCKER: requires approval and generated OpenAPI from backend 009-012.
 
 ## Definition of Ready
 
-`BLOCKED`
-> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.
+`BLOCKED` - FE-004 and approved generated OpenAPI from backend 009-012.

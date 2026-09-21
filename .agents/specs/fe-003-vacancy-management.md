@@ -1,81 +1,102 @@
-# FE-003 - Gestión de vacantes
+# FE-003 - Vacancy Management
 
-## Objetivo
+## Objective
 
-Ofrecer a reclutadores la interfaz para listar, crear, editar, archivar y reactivar vacantes con requisitos ponderados, respetando la versión y validación backend.
+Provide shared vacancy list, detail, creation, complete editing, archiving, and
+reactivation for authenticated recruiters and administrators.
 
-## Referencias
+## References
 
-- `docs/PRD.md`, sección 4.
-- `docs/FRONTEND_PHASE_SPECS.md`, FE-003.
-- `docs/FRONTEND_ROADMAP.md`, FE-003.
-- `.agents/specs/003-vacancy-management.md`.
+- `docs/prd-002-vacancies-async-jobs.md` sections 1 through 4.
+- `docs/architecture.md` sections 3, 7, and 9.
+- Frontend planning documents, FE-003; backend specs 001 and 003.
 
-## Alcance
+## Scope
 
-### Incluido
+### Included
 
-- Lista, detalle, formulario de creación/edición, requisitos ordenables y archivo/reactivación.
-- Entrada de fechas en `America/La_Paz` y manejo visual de `VERSION_CONFLICT`.
+- Vacancy list/detail, create/edit form, ordered 1-30 requirement editor, active
+  title-duplicate warning, archive/reactivate actions, and concurrency handling.
 
-### Excluido
+### Excluded
 
-- Solicitud de reportes, candidatos, resultados, búsqueda histórica e integraciones.
+- Report job creation/status, report results, candidate data, historical search,
+  export, and frontend scoring or UTC range calculation.
 
-## Comportamiento y reglas
+## UX Behavior
 
-- La UI no calcula pesos, versiones, elegibilidad ni reglas de archivo; envía datos validados por contrato incluido `expectedVersion`.
-- Requisitos preservan el orden enviado por usuario y muestran peso 1 a 5, descripción y marca obligatoria.
-- Ante conflicto, conserva el borrador local, presenta que la versión cambió y obliga a recargar o cancelar; nunca sobrescribe automáticamente.
+- The form captures date-only values labelled as Bolivia time, title, description,
+  and requirement description, integer weight, mandatory flag, and order.
+- Local feedback aids entry, but backend validation decides validity. A duplicate
+  active title is a non-blocking warning exactly when returned by the API.
+- Archived vacancies are read-only. Archive/reactivate ask for confirmation where
+  appropriate and refresh the resource after success. A version conflict preserves
+  unsaved local work visibly and requires the user to reload before submitting.
 
-## Contratos
+## API Contract Dependencies
 
-Usar exclusivamente OpenAPI aprobado de backend 003 para lista, detalle, mutaciones, archivo/reactivación y errores de versión.
+- Consume only generated OpenAPI from backend spec 003 for vacancy query, detail,
+  create, complete update, archive/reactivate, duplicate-title warning, versions,
+  and API validation/conflict responses.
+- Send the generated expected-version field when required. Do not construct UTC
+  timestamps, derive archive state, or invent vacancy endpoints/types.
 
-## Datos y persistencia
+## Routes, State, Accessibility, and Responsive Design
 
-Los borradores no se persisten automáticamente. No modificar datos compartidos en caché tras conflicto o fallo.
+- Add protected recruiter/admin list, create, and detail/edit routes. Preserve no
+  draft in persistent browser storage.
+- Cover loading, empty list, validation, duplicate warning, archived, `409`,
+  retry, and `401`/`403` states. Use accessible ordered controls for requirements,
+  labelled fields/error associations, keyboard archive dialogs, and focus return.
+- Desktop supports dense editing; mobile uses a single-column editor with visible
+  reorder controls, large touch targets, and no reliance on drag-only interaction.
 
-## Integraciones
+## Frontend Security and Privacy
 
-No inicia jobs ni llama servicios externos.
+- Render only vacancy content returned by the API. Do not log form content,
+  versions, errors, or IDs to telemetry; do not place protected content in URLs
+  except the opaque route identifier required by generated navigation.
 
-## Errores y estados
+## Configuration and Integrations
 
-Soporta loading, vacío, validación, conflicto, retry y error seguro. Fechas inválidas se corrigen antes de enviar sin alterar reglas timezone backend.
+- Reuse FE-001 API/auth configuration. No external integration, secret, or new
+  frontend configuration point is introduced.
 
-## Seguridad y privacidad
+## Data, Persistence, Errors, and Observability
 
-Ruta autenticada para `RECRUITER`/`ADMIN`; no exponer datos a `401`/`403`. No registrar descripciones de vacante en telemetry sin aprobación.
+- State is ephemeral. Normalize `422` field errors and `409` version conflicts;
+  server data is re-fetched rather than automatically merged or overwritten.
 
-## Observabilidad
+## Manual Validation
 
-Errores técnicos seguros y `correlationId`; sin contenido de formularios.
+- With synthetic vacancies, validate create, ordered requirements, boundaries
+  1/30 and weights 1/5, invalid dates, duplicate warning, edit, archive/reactivate,
+  concurrent edit conflict, keyboard use, responsive layout, and authorization.
 
-## Estrategia de pruebas
+## Deferred Automation
 
-Componentes de requisitos/fechas/conflicto, contrato OpenAPI 003 y E2E de CRUD, archivo, reactivación y conflicto.
+- Final stabilization: form/component tests, generated-contract tests, E2E for
+  CRUD/archive/conflict, and accessibility/responsive regression tests.
 
-## Criterios de aceptación
+## Acceptance Criteria
 
-1. Un reclutador administra vacantes y requisitos válidos mediante API.
-2. La UI envía `expectedVersion` y nunca sobrescribe un conflicto.
-3. Fechas se presentan en Bolivia y el resultado backend es la autoridad.
-4. La pantalla es accesible, responsiva y maneja errores seguros.
+1. Recruiters and admins can manage shared valid vacancies with ordered
+   requirements and Bolivia date-only input.
+2. A duplicate active title warns without blocking a valid save.
+3. Archived vacancies cannot be edited or used by this UI to start work.
+4. A stale update never overwrites another user's saved vacancy change.
 
-## Riesgos y dependencias
+## Dependencies and Risks
 
-| Tipo | Detalle | Tratamiento |
-| --- | --- | --- |
-| Dependencia satisfecha | Contrato OpenAPI de backend 003 generado y validado para frontend. FE-001 y backend 003 están disponibles. | Consumir exclusivamente los tipos generados y mantener los controles de sesión de FE-001. |
+- Depends on FE-001 and backend 003 generated OpenAPI.
+- RISK: exact API representation of date-only Bolivia values must be published;
+  frontend must not assume a timestamp encoding.
 
-## Decisiones / preguntas abiertas
+## Decisions / Open Questions
 
-- **ARCHITECTURAL DECISION:** Versionado y validaciones de vacante pertenecen al backend.
+- ARCHITECTURAL DECISION: server/OpenAPI owns date conversion and conflict shape.
+- BLOCKER: requires approval and generated OpenAPI from backend 003.
 
 ## Definition of Ready
 
-`READY_FOR_DEV`
-
-OpenAPI 003 aprobado y disponible en `cv-matcher-frontend/src/api/generated.ts`; FE-001 y backend 003 satisfacen las dependencias del incremento.
-> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.
+`BLOCKED` - approve backend 003 and publish generated OpenAPI with its date and concurrency contract.

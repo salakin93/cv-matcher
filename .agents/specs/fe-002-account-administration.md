@@ -1,94 +1,112 @@
-# FE-002 - Administración de cuentas
+# FE-002 - Account Administration
 
-## Objetivo
+## Objective
 
-Permitir que un `ADMIN` consulte cuentas y aplique cambios seguros de rol o estado mediante la API administrativa, sin exponer sesiones, tokens ni datos sensibles.
+Extend the authenticated React application with password recovery, voluntary
+password/email changes, and ADMIN-only account administration.
 
-## Referencias
+## References
 
-- `docs/PRD.md`, secciones 2, 3 y 9.
-- `docs/FRONTEND_PHASE_SPECS.md`, FE-002.
-- `docs/FRONTEND_ROADMAP.md`, FE-002.
-- `.agents/specs/002-account-administration.md`.
+- `docs/prd-001-access-users-administration.md` FR-ACC-015 through FR-ACC-028.
+- `docs/architecture.md` sections 5 and 9.
+- Frontend planning documents, FE-002; backend specs 001 and 002.
 
-## Alcance
+## Scope
 
-### Incluido
+### Included
 
-- Ruta y navegación exclusivas de `ADMIN`.
-- Tabla paginada con filtros exactos de rol y estado.
-- Cambio de rol y activación/desactivación con confirmación explícita.
-- Estados de conflicto, recarga de datos y gestión de revocación de la sesión propia.
+- Spanish recovery request and reset flows; authenticated voluntary password and
+  email-change flows.
+- ADMIN user list with backend pagination/filtering, role and activation actions,
+  confirmations, and visible optimistic-concurrency/last-ADMIN conflicts.
 
-### Excluido
+### Excluded
 
-- Crear cuentas, invitaciones, edición de contraseña/correo, `forcePasswordChange`, auditoría consultable y eliminación.
-- Búsqueda textual o filtros no definidos por API.
+- Manual account creation, invitations, account deletion, administrative password
+  or email changes, MFA, SSO, and navigable audit history.
 
-## Comportamiento y reglas
+## UX Behavior
 
-- La tabla muestra sólo los campos de `AccountSummary` aprobados por 002 y ordena/renderiza el resultado backend sin enriquecerlo con datos locales.
-- Filtros y página se envían como contrato; cambiar un filtro reinicia a página cero.
-- Antes de una mutación, la UI describe cuenta objetivo y acción. Tras `204`, recarga la página actual.
-- `LAST_ACTIVE_ADMIN`, `SELF_ADMINISTRATION_FORBIDDEN` y `EMAIL_NOT_VERIFIED` se muestran como conflictos seguros en español; no se intenta sobrescribir ni reintentar automáticamente.
-- Si el cambio revoca la sesión propia y llega `401`, FE-001 limpia sesión y lleva a login.
+- Recovery always shows the neutral outcome. Expired, used, or replaced links use
+  safe API feedback and offer a new request.
+- Successful reset, password change, or verified email change redirects to login
+  because backend sessions are revoked; it never signs the user in automatically.
+- The ADMIN table does not offer self-role/self-activation controls. A rejected
+  last-active-ADMIN change explains the safe conflict and refreshes server data;
+  it never overwrites concurrent changes.
 
-## Contratos
+## API Contract Dependencies
 
-- `GET /api/v1/admin/users` con `role`, `status`, `page`, `size`.
-- `PATCH /api/v1/admin/users/{userId}/role` y `/status` con los DTOs de 002.
-- Manejar `401`, `403`, `404 USER_NOT_FOUND`, `409`, `422 VALIDATION_ERROR` y `correlationId` según OpenAPI.
+- Consume generated OpenAPI from backend specs 001 and 002 for current user,
+  recovery/reset, password/email change and verification, and ADMIN user query
+  and mutation operations.
+- Use generated pagination, version/concurrency, role, state, and error models;
+  do not infer endpoints or reproduce server account rules.
 
-## Datos y persistencia
+## Routes, State, Accessibility, and Responsive Design
 
-No persiste la lista ni respuestas administrativas fuera de memoria. El correo es PII permitida sólo dentro de la ruta ADMIN autenticada.
+- Add public recovery/reset routes and authenticated account-security routes.
+  Mount administration only behind the FE-001 ADMIN route guard and hide its
+  navigation from recruiters.
+- Use server pagination/filter state in the page state, not URLs when it could
+  expose personal data. Handle loading, empty, validation, conflict, retry, and
+  session-revoked states.
+- Tables have labelled filters, keyboard-operable pagination and actions, dialog
+  focus trapping/return, and accessible mutation announcements. On mobile use
+  readable row cards or an equivalent accessible responsive representation.
 
-## Integraciones
+## Frontend Security and Privacy
 
-No hay integraciones externas.
+- Display only account fields returned by OpenAPI and needed for administration.
+  Never render sessions, hashes, passwords, tokens, verification values, or raw
+  errors; do not log recovery/email values or user-list data.
 
-## Errores y estados
+## Configuration and Integrations
 
-La tabla ofrece loading, vacía, error y retry. Los diálogos impiden doble envío mientras la solicitud está pendiente; `422` se muestra junto al campo o formulario aplicable.
+- Reuse FE-001's single generated API client and auth/error handling. No new
+  browser configuration, storage, provider integration, or secret is introduced.
 
-## Seguridad y privacidad
+## Data, Persistence, Errors, and Observability
 
-- La ruta no se navega ni renderiza para `RECRUITER`; backend conserva la autoridad.
-- No mostrar ni registrar hashes, tokens, sesiones, `lockedUntil`, fallos de login ni correlation IDs como datos analíticos.
-- No incluir correo o UUID en URL, telemetry o logs cliente.
+- Keep forms and user data in ephemeral component/query state. `401` clears the
+  session, `403` shows denial, and `409` reloads the affected account/list.
+- Record no account PII in client telemetry; only approved technical event names
+  and safe correlation IDs may be emitted.
 
-## Observabilidad
+## Manual Validation
 
-Registrar sólo fallos técnicos sin PII. Mostrar `correlationId` recibido para soporte, sin copiar payloads sensibles.
+- Validate neutral recovery for synthetic existing/non-existing accounts, invalid
+  and used reset links, session revocation after each applicable change, and new
+  email verification.
+- Validate ADMIN pagination/filtering, role/activation confirmation, self-action
+  absence, last-ADMIN conflict, recruiter `403`, keyboard dialogs, and mobile.
 
-## Estrategia de pruebas
+## Deferred Automation
 
-- Componentes: tabla, filtros, paginación, confirmaciones y conflictos.
-- Contrato: operaciones generadas desde OpenAPI 002.
-- E2E: guard ADMIN, `403`, cambios exitosos, `409`, `422`, `404` y sesión revocada.
+- Final stabilization: component/contract tests for neutral recovery and
+  conflicts; E2E for reset, revocation, email change, ADMIN authorization, and
+  last-ADMIN protection; accessibility and responsive table coverage.
 
-## Criterios de aceptación
+## Acceptance Criteria
 
-1. Sólo ADMIN puede ver y usar la pantalla; `401` y `403` no muestran datos previos.
-2. Tabla, filtros y paginación coinciden con la respuesta API y no muestran campos excluidos.
-3. Cambios efectivos requieren confirmación y refrescan datos tras éxito.
-4. Conflictos y validaciones son seguros, accesibles y no realizan mutaciones adicionales.
-5. Ningún dato administrativo sensible se persiste o registra en navegador.
+1. Recovery does not reveal whether an active account exists.
+2. A successful security change requiring session revocation returns the user to
+   login without protected data remaining visible.
+3. Only ADMIN can manage other accounts, and the UI cannot submit self changes.
+4. Concurrent or last-ADMIN conflicts are visible and require reload before retry.
 
-## Riesgos y dependencias
+## Dependencies and Risks
 
-| Tipo | Detalle | Tratamiento |
-| --- | --- | --- |
-| Dependencia | FE-001 y OpenAPI 002. | Reutilizar cliente, sesión y manejo de errores. |
-| Riesgo | Revocar la propia sesión. | Delegar `401` al coordinador de sesión FE-001. |
+- Depends on FE-001 and backend 002 generated OpenAPI; backend 001 remains a
+  transitive dependency.
+- RISK: user-list fields and filter semantics must be minimized by backend schema.
 
-## Decisiones / preguntas abiertas
+## Decisions / Open Questions
 
-- **ARCHITECTURAL DECISION:** La UI no calcula el invariante de último ADMIN; presenta el resultado backend `409`.
+- ARCHITECTURAL DECISION: all account administration models come from generated
+  OpenAPI; no frontend-owned account DTOs.
+- BLOCKER: requires approval and generated OpenAPI from backend 001/002.
 
 ## Definition of Ready
 
-`READY_FOR_DEV`
-
-002 define endpoints, DTOs y errores administrativos necesarios.
-> **Política temporal de validación — prevalece sobre referencias de pruebas de esta spec.** Durante la construcción integrada no se crean ni se exigen pruebas automatizadas por incremento. La aceptación se sustenta en pruebas manuales end-to-end con frontend cuando aplique, casos ejecutados, resultado y evidencia de errores corregidos. Las estrategias de pruebas aquí descritas se conservan como plan obligatorio de automatización y regresión para la fase final de estabilización. No se eliminan ni deshabilitan pruebas existentes para obtener una aprobación.
+`BLOCKED` - FE-001 foundation and approved generated OpenAPI from backend 001/002.
