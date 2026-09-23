@@ -22,10 +22,9 @@ import java.util.Base64;
 import java.util.UUID;
 
 @Service
-public class IdentityService implements SessionRevocationPort {
+public class IdentityService {
     private static final Logger log = LoggerFactory.getLogger(IdentityService.class);
     private final JdbcTemplate jdbc;
-    private final MailGateway mail;
     private final SecurityProperties props;
     private final JwtService jwt;
     private final MeterRegistry metrics;
@@ -33,23 +32,12 @@ public class IdentityService implements SessionRevocationPort {
     private final Argon2PasswordEncoder encoder = Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
 
     @Autowired
-    public IdentityService(JdbcTemplate jdbc, MailGateway mail, SecurityProperties props, JwtService jwt, MeterRegistry metrics, VerificationOutbox verificationOutbox) {
+    public IdentityService(JdbcTemplate jdbc, SecurityProperties props, JwtService jwt, MeterRegistry metrics, VerificationOutbox verificationOutbox) {
         this.jdbc = jdbc;
-        this.mail = mail;
         this.props = props;
         this.jwt = jwt;
         this.metrics = metrics;
         this.verificationOutbox = verificationOutbox;
-    }
-
-    public IdentityService(JdbcTemplate jdbc, MailGateway mail, SecurityProperties props, JwtService jwt, MeterRegistry metrics) {
-        this(jdbc, mail, props, jwt, metrics, new VerificationOutbox(jdbc, props));
-    }
-
-    @Override
-    @Transactional
-    public void revokeAllSessions(UUID userId) {
-        revokeAll(userId);
     }
 
     @Transactional
@@ -61,13 +49,13 @@ public class IdentityService implements SessionRevocationPort {
         var now = Instant.now();
         var inserted = jdbc.update("insert into user_account(id,full_name,email,email_normalized,password_hash,role,status,created_at,updated_at) values(?,?,?,?,?,'RECRUITER','PENDING_VERIFICATION',?,?) on conflict (email_normalized) do nothing", id, name.trim(), email.trim(), normalized, encoder.encode(password), timestamp(now), timestamp(now));
         if (inserted == 0) return;
-        sendToken(id, "EMAIL_VERIFICATION", null, props.verificationHours() * 3600);
+        sendToken(id, "EMAIL_VERIFICATION", props.verificationHours() * 3600);
         audit(null, "ACCOUNT_REGISTERED", id);
         count("identity.registrations");
     }
 
     @Transactional
-    public void confirm(String raw, String purpose, String password) {
+    public void confirm(String raw, String purpose) {
         var row = jdbc.queryForList("select id,user_id,target_email,expires_at,consumed_at,purpose from account_action_token where token_hash=?", hash(raw)).stream().findFirst().orElse(null);
         if (row == null || !purpose.equals(row.get("purpose")) || !((java.sql.Timestamp) row.get("expires_at")).toInstant().isAfter(Instant.now()) || row.get("consumed_at") != null)
             throw new IllegalArgumentException("Invalid or expired token");
@@ -75,16 +63,6 @@ public class IdentityService implements SessionRevocationPort {
         if ("EMAIL_VERIFICATION".equals(purpose)) {
             var now = Instant.now();
             jdbc.update("update user_account set status='ACTIVE',email_verified_at=?,updated_at=? where id=?", timestamp(now), timestamp(now), user);
-        } else if ("PASSWORD_RESET".equals(purpose)) {
-            validatePassword(password);
-            jdbc.update("update user_account set password_hash=?,force_password_change=false,updated_at=? where id=?", encoder.encode(password), timestamp(Instant.now()), user);
-            revokeAll(user);
-        } else {
-            var target = (String) row.get("target_email");
-            if (exists(target)) throw new IllegalStateException("Email already in use");
-            var now = Instant.now();
-            jdbc.update("update user_account set email=?,email_normalized=?,email_verified_at=?,updated_at=? where id=?", target, target, timestamp(now), timestamp(now), user);
-            revokeAll(user);
         }
         if (jdbc.update("update account_action_token set consumed_at=? where id=? and consumed_at is null", timestamp(Instant.now()), UUID.fromString(row.get("id").toString())) != 1)
             throw new IllegalArgumentException("Invalid or expired token");
@@ -109,19 +87,33 @@ public class IdentityService implements SessionRevocationPort {
 
         var id = UUID.fromString(user.get("id").toString());
         var locked = (java.sql.Timestamp) user.get("locked_until");
+        var status = (String) user.get("status");
+        var passwordHash = (String) user.get("password_hash");
+        var passwordMatches = encoder.matches(password, passwordHash);
 
         if (locked != null && locked.toInstant().isAfter(Instant.now())) {
+            if (passwordMatches) {
+                throw new AccountAccessException(AccountAccessException.Reason.ACCOUNT_TEMPORARILY_LOCKED);
+            }
             count("identity.logins", "outcome", "locked");
             logFailure("ACCOUNT_LOCKED", id);
             throw new SecurityException("Invalid credentials");
         }
 
-        var status = (String) user.get("status");
-        var passwordHash = (String) user.get("password_hash");
+        if ("PENDING_VERIFICATION".equals(status) && passwordMatches) {
+            throw new AccountAccessException(AccountAccessException.Reason.EMAIL_VERIFICATION_REQUIRED);
+        }
+        if (!"ACTIVE".equals(status) && passwordMatches) {
+            count("identity.logins", "outcome", "failure");
+            logFailure("INVALID_CREDENTIALS", id);
+            throw new SecurityException("Invalid credentials");
+        }
 
-        if (!"ACTIVE".equals(status) || !encoder.matches(password, passwordHash)) {
+        if (!passwordMatches) {
             var attempts = ((Number) user.get("failed_login_attempts")).intValue() + 1;
-            var lockedUntil = attempts >= 5 ? Instant.now().plusSeconds(900) : null;
+            var lockedUntil = attempts >= props.loginMaxFailedAttempts()
+                    ? Instant.now().plusSeconds(props.loginLockMinutes() * 60)
+                    : null;
 
             jdbc.update(
                     "update user_account set failed_login_attempts=?, locked_until=?, updated_at=? where id=?",
@@ -130,8 +122,8 @@ public class IdentityService implements SessionRevocationPort {
                     timestamp(Instant.now()),
                     id
             );
-            if (attempts == 5) audit(id, "LOGIN_LOCKED", id);
-            if (attempts == 5) count("identity.login.locks");
+            if (attempts == props.loginMaxFailedAttempts()) audit(id, "LOGIN_LOCKED", id);
+            if (attempts == props.loginMaxFailedAttempts()) count("identity.login.locks");
             count("identity.logins", "outcome", "failure");
             logFailure("INVALID_CREDENTIALS", id);
 
@@ -159,19 +151,17 @@ public class IdentityService implements SessionRevocationPort {
         count("identity.logins", "outcome", "success");
 
         var role = (String) user.get("role");
-        var forcePasswordChange = Boolean.TRUE.equals(user.get("force_password_change"));
-
         return new Login(
                 jwt.issue(id, role, sessionId),
                 refreshToken,
                 sessionId,
-                new UserInfo(id, (String) user.get("full_name"), (String) user.get("email"), role, status, forcePasswordChange)
+                new UserInfo(id, (String) user.get("full_name"), (String) user.get("email"), role, status)
         );
     }
 
     @Transactional(noRollbackFor = SecurityException.class)
     public Login refresh(String raw) {
-        var s = jdbc.queryForList("select s.*,u.full_name,u.email,u.role,u.status,u.force_password_change from user_session s join user_account u on u.id=s.user_id where s.refresh_token_hash=?", hash(raw)).stream().findFirst().orElse(null);
+        var s = jdbc.queryForList("select s.*,u.full_name,u.email,u.role,u.status from user_session s join user_account u on u.id=s.user_id where s.refresh_token_hash=?", hash(raw)).stream().findFirst().orElse(null);
         if (s == null) {
             count("identity.refreshes", "outcome", "failure");
             logFailure("INVALID_SESSION", null);
@@ -203,17 +193,16 @@ public class IdentityService implements SessionRevocationPort {
         audit(user, "REFRESH_ROTATED", user);
         count("identity.refreshes", "outcome", "success");
         var role = (String) s.get("role");
-        var forcePasswordChange = Boolean.TRUE.equals(s.get("force_password_change"));
         return new Login(
                 jwt.issue(user, role, nextId),
                 next,
                 nextId,
-                new UserInfo(user, (String) s.get("full_name"), (String) s.get("email"), role, (String) s.get("status"), forcePasswordChange)
+                new UserInfo(user, (String) s.get("full_name"), (String) s.get("email"), role, (String) s.get("status"))
         );
     }
 
     @Transactional
-    public void requestToken(String email, String purpose, String target) {
+    public void requestToken(String email, String purpose) {
         var account = jdbc.query(
                 "select id,status from user_account where email_normalized=? for update",
                 rs -> rs.next() ? new Object[]{UUID.fromString(rs.getString("id")), rs.getString("status")} : null,
@@ -224,14 +213,8 @@ public class IdentityService implements SessionRevocationPort {
         var userId = (UUID) account[0];
         var status = (String) account[1];
 
-        if ("PASSWORD_RESET".equals(purpose) && "ACTIVE".equals(status)) {
-            sendToken(userId, purpose, target, props.resetMinutes() * 60);
-            audit(userId, "PASSWORD_RESET_REQUESTED", userId);
-            count("identity.password.resets", "outcome", "requested");
-        }
-
         if ("EMAIL_VERIFICATION".equals(purpose) && "PENDING_VERIFICATION".equals(status) && canResendVerification(userId)) {
-            sendToken(userId, purpose, target, props.verificationHours() * 3600);
+            sendToken(userId, purpose, props.verificationHours() * 3600);
             count("identity.verification.resends");
         }
     }
@@ -249,52 +232,24 @@ public class IdentityService implements SessionRevocationPort {
         }
     }
 
-    @Transactional
-    public void changePassword(UUID userId, String current, String replacement) {
-        var hash = jdbc.queryForObject("select password_hash from user_account where id=?", String.class, userId);
-        if (!encoder.matches(current, hash)) throw new SecurityException("Invalid credentials");
-        validatePassword(replacement);
-        jdbc.update("update user_account set password_hash=?,force_password_change=false,updated_at=? where id=?", encoder.encode(replacement), timestamp(Instant.now()), userId);
-        revokeAll(userId);
-        audit(userId, "PASSWORD_CHANGED", userId);
-        count("identity.password.changes");
-    }
-
-    @Transactional
-    public void requestEmailChange(UUID userId, String current, String email) {
-        var hash = jdbc.queryForObject("select password_hash from user_account where id=?", String.class, userId);
-        if (!encoder.matches(current, hash)) throw new SecurityException("Invalid credentials");
-        var normalized = normalize(email);
-        if (exists(normalized)) throw new IllegalStateException("Email already in use");
-        sendToken(userId, "EMAIL_CHANGE", normalized, props.verificationHours() * 3600);
-    }
-
     public UserInfo me(UUID userId) {
-        var row = jdbc.queryForMap("select id,full_name,email,role,status,email_verified_at,force_password_change from user_account where id=?", userId);
-        return new UserInfo(UUID.fromString(row.get("id").toString()), (String) row.get("full_name"), (String) row.get("email"), (String) row.get("role"), (String) row.get("status"), Boolean.TRUE.equals(row.get("force_password_change")));
+        var row = jdbc.queryForMap("select id,full_name,email,role,status from user_account where id=?", userId);
+        return new UserInfo(UUID.fromString(row.get("id").toString()), (String) row.get("full_name"), (String) row.get("email"), (String) row.get("role"), (String) row.get("status"));
     }
 
     public boolean exists(String email) {
         return Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from user_account where email_normalized=?)", Boolean.class, email));
     }
 
-    private void sendToken(UUID id, String purpose, String target, long seconds) {
+    private void sendToken(UUID id, String purpose, long seconds) {
         jdbc.update("update account_action_token set consumed_at=? where user_id=? and purpose=? and consumed_at is null", timestamp(Instant.now()), id, purpose);
         var raw = random();
-        jdbc.update("insert into account_action_token(id,user_id,token_hash,purpose,target_email,expires_at,created_at) values(?,?,?,?,?,?,?)", UUID.randomUUID(), id, hash(raw), purpose, target, timestamp(Instant.now().plusSeconds(seconds)), timestamp(Instant.now()));
+        jdbc.update("insert into account_action_token(id,user_id,token_hash,purpose,target_email,expires_at,created_at) values(?,?,?,?,?,?,?)", UUID.randomUUID(), id, hash(raw), purpose, null, timestamp(Instant.now().plusSeconds(seconds)), timestamp(Instant.now()));
         var email = jdbc.queryForObject("select email from user_account where id=?", String.class, id);
         if ("EMAIL_VERIFICATION".equals(purpose)) {
             verificationOutbox.enqueue(email, raw);
             count("identity.outbox", "purpose", purpose);
             return;
-        }
-        try {
-            mail.send(new MailGateway.MailCommand(MailGateway.Purpose.valueOf(purpose), email, raw));
-            count("identity.mail", "outcome", "sent", "purpose", purpose);
-        } catch (RuntimeException exception) {
-            count("identity.mail", "outcome", "failure", "purpose", purpose);
-            logFailure("MAIL_DELIVERY_FAILED", id);
-            throw exception;
         }
     }
 
@@ -335,12 +290,7 @@ public class IdentityService implements SessionRevocationPort {
     }
 
     private String eventForTokenConfirmation(String purpose) {
-        return switch (purpose) {
-            case "EMAIL_VERIFICATION" -> "EMAIL_VERIFIED";
-            case "PASSWORD_RESET" -> "PASSWORD_RESET_COMPLETED";
-            case "EMAIL_CHANGE" -> "EMAIL_CHANGED";
-            default -> "TOKEN_CONFIRMED";
-        };
+        return "EMAIL_VERIFICATION".equals(purpose) ? "EMAIL_VERIFIED" : "TOKEN_CONFIRMED";
     }
 
     private UUID correlationId() {
@@ -382,7 +332,6 @@ public class IdentityService implements SessionRevocationPort {
     public record Login(String accessToken, String refreshToken, UUID sessionId, UserInfo user) {
     }
 
-    public record UserInfo(UUID id, String fullName, String email, String role, String status,
-                           boolean forcePasswordChange) {
+    public record UserInfo(UUID id, String fullName, String email, String role, String status) {
     }
 }

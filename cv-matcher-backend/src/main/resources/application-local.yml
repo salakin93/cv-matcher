@@ -1,5 +1,0 @@
-app:
-  security:
-    secure-cookies: false
-  cors:
-    allowed-origins: http://localhost:5173

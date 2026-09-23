@@ -1,6 +1,5 @@
 package com.cvmatcher.cv_matcher_backend.identity.insfrastructure.security;
 
-import com.cvmatcher.cv_matcher_backend.identity.CorsProperties;
 import com.cvmatcher.cv_matcher_backend.identity.SecurityProperties;
 import com.cvmatcher.cv_matcher_backend.identity.api.ApiError;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
@@ -10,7 +9,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -18,9 +16,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
@@ -44,14 +39,13 @@ public class SecurityConfiguration {
     SecurityFilterChain security(
             HttpSecurity http,
             BearerJwtAuthenticationFilter bearer,
-            PasswordChangeRequiredFilter passwordChangeRequired,
             CookieCsrfTokenRepository csrfTokenRepository,
             ObjectMapper mapper
     ) throws Exception {
         http.csrf(c -> c.csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .requireCsrfProtectionMatcher(r -> HttpMethod.POST.name().equals(r.getMethod()) && ("/api/v1/auth/refresh".equals(r.getRequestURI()) || "/api/v1/auth/logout".equals(r.getRequestURI()))))
-                .cors(Customizer.withDefaults()).sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a.requestMatchers(
                                 "/error",
                                 "/api/v1/auth/register",
@@ -60,40 +54,19 @@ public class SecurityConfiguration {
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/verify-email",
                                 "/api/v1/auth/resend-verification",
-                                "/api/v1/auth/email-verification/**",
-                                "/api/v1/auth/email-change/confirm",
-                                "/api/v1/auth/password-reset/**",
                                 "/actuator/health/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**"
-                        ).permitAll().requestMatchers("/api/v1/admin/integrations/outlook/callback")
-                        .permitAll().requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/vacancies/**", "/api/v1/report-jobs/**").hasAnyRole("RECRUITER", "ADMIN").anyRequest().authenticated())
+                        ).permitAll().anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, exception) ->
                                 write(mapper, request, response, 401, "UNAUTHENTICATED", "No autenticado"))
                         .accessDeniedHandler((request, response, exception) ->
                                 write(mapper, request, response, 403, "FORBIDDEN",
                                         "No tiene permisos para realizar esta operación.")))
-                .addFilterBefore(bearer, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(passwordChangeRequired, BearerJwtAuthenticationFilter.class);
+                .addFilterBefore(bearer, UsernamePasswordAuthenticationFilter.class);
         return http.build();
-    }
-
-    @Bean
-    CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
-        if (properties.allowedOrigins() == null || properties.allowedOrigins().isEmpty()) {
-            throw new IllegalStateException("At least one CORS origin must be configured");
-        }
-        var c = new CorsConfiguration();
-        c.setAllowedOrigins(properties.allowedOrigins());
-        c.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        c.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type", "X-CSRF-TOKEN"));
-        c.setAllowCredentials(true);
-        var s = new UrlBasedCorsConfigurationSource();
-        s.registerCorsConfiguration("/**", c);
-        return s;
     }
 
     private static void write(

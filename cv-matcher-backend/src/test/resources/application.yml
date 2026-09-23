@@ -8,13 +8,12 @@ app:
     access-token-minutes: 15
     session-hours: 8
     verification-hours: 24
-    reset-minutes: 30
-    initial-admin-email: "admin@test.com"
-    initial-admin-password: "ClaveSegura1"
     secure-cookies: false
     verification-resend-limit: 3
     verification-resend-window-seconds: 3600
     outbox-encryption-key: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
     outbox-encryption-key-version: 1
+    login-max-failed-attempts: 5
+    login-lock-minutes: 15
   cors:
     allowed-origins: http://localhost:5173

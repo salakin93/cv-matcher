@@ -1,8 +1,0 @@
-app:
-  job:
-    documents:
-      enabled: true
-  security:
-    secure-cookies: true
-  cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS}

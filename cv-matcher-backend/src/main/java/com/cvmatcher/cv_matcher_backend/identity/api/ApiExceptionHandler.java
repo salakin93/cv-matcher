@@ -1,12 +1,8 @@
 package com.cvmatcher.cv_matcher_backend.identity.api;
 
-import com.cvmatcher.cv_matcher_backend.administration.application.AdministrationException;
 import com.cvmatcher.cv_matcher_backend.identity.application.PasswordPolicyException;
+import com.cvmatcher.cv_matcher_backend.identity.application.AccountAccessException;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
-import com.cvmatcher.cv_matcher_backend.job.application.JobException;
-import com.cvmatcher.cv_matcher_backend.outlook.application.OutlookException;
-import com.cvmatcher.cv_matcher_backend.vacancy.application.VacancyException;
-import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DuplicateKeyException;
@@ -24,12 +20,6 @@ import java.util.UUID;
 
 @RestControllerAdvice
 class ApiExceptionHandler {
-    private final MeterRegistry metrics;
-
-    ApiExceptionHandler(MeterRegistry metrics) {
-        this.metrics = metrics;
-    }
-
     @ExceptionHandler(PasswordPolicyException.class)
     ResponseEntity<ApiError> handlePasswordPolicy(HttpServletRequest request) {
         return error(
@@ -50,37 +40,22 @@ class ApiExceptionHandler {
         return error(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Credenciales inválidas.", request);
     }
 
+    @ExceptionHandler(AccountAccessException.class)
+    ResponseEntity<ApiError> handleAccountAccess(AccountAccessException exception, HttpServletRequest request) {
+        return switch (exception.reason()) {
+            case EMAIL_VERIFICATION_REQUIRED -> error(HttpStatus.UNAUTHORIZED, "EMAIL_VERIFICATION_REQUIRED", "Verifique su correo para continuar.", request);
+            case ACCOUNT_TEMPORARILY_LOCKED -> error(HttpStatus.UNAUTHORIZED, "ACCOUNT_TEMPORARILY_LOCKED", "La cuenta está bloqueada temporalmente.", request);
+        };
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiError> handleRequestValidation(HttpServletRequest request) {
-        jobValidationMetric(request);
         return error(HttpStatus.UNPROCESSABLE_ENTITY, "VALIDATION_ERROR", "Revise los datos enviados.", request);
     }
 
     @ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class, ConstraintViolationException.class, HandlerMethodValidationException.class})
     ResponseEntity<ApiError> handleMalformedRequest(HttpServletRequest request) {
-        jobValidationMetric(request);
         return error(HttpStatus.UNPROCESSABLE_ENTITY, "VALIDATION_ERROR", "Revise los datos enviados.", request);
-    }
-
-    @ExceptionHandler(AdministrationException.class)
-    ResponseEntity<ApiError> handleAdministration(AdministrationException exception, HttpServletRequest request) {
-        return error(exception.status(), exception.code(), "La operación no puede completarse.", request);
-    }
-
-    @ExceptionHandler(VacancyException.class)
-    ResponseEntity<ApiError> handleVacancy(VacancyException exception, HttpServletRequest request) {
-        return error(exception.status(), exception.code(), "La operación no puede completarse.", request);
-    }
-
-    @ExceptionHandler(JobException.class)
-    ResponseEntity<ApiError> handleJob(JobException exception, HttpServletRequest request) {
-        if (exception.status() == HttpStatus.UNPROCESSABLE_ENTITY) jobValidationMetric(request);
-        return error(exception.status(), exception.code(), "La operaciÃ³n no puede completarse.", request);
-    }
-
-    @ExceptionHandler(OutlookException.class)
-    ResponseEntity<ApiError> handleOutlook(OutlookException exception, HttpServletRequest request) {
-        return error(exception.status(), exception.code(), "La operación no puede completarse.", request);
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -106,17 +81,6 @@ class ApiExceptionHandler {
     private UUID correlationId(HttpServletRequest request) {
         var value = request.getAttribute(CorrelationIdFilter.ATTRIBUTE);
         return value instanceof UUID correlationId ? correlationId : null;
-    }
-
-    private void jobValidationMetric(HttpServletRequest request) {
-        if (!"POST".equals(request.getMethod())) return;
-        var path = request.getRequestURI();
-        String action = null;
-        if (path.startsWith("/api/v1/vacancies/") && path.endsWith("/report-jobs")) action = "enqueue";
-        if (path.startsWith("/api/v1/report-jobs/") && path.endsWith("/cancel")) action = "cancel";
-        if (path.startsWith("/api/v1/report-jobs/") && path.endsWith("/retry")) action = "retry";
-        if (action != null)
-            metrics.counter("matching_jobs.mutations", "action", action, "outcome", "validation_error").increment();
     }
 
 }

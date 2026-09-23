@@ -1,8 +1,6 @@
 spring:
   application:
     name: cv-matcher-backend
-  profiles:
-    default: local
   config:
     # Supports running from either the repository root or the backend module.
     import: optional:file:./.env[.properties],optional:file:../.env[.properties]
@@ -10,17 +8,8 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5430/cv-matcher}
     username: ${DB_USERNAME:salaco}
     password: ${DB_PASSWORD:}
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: validate
   flyway:
     enabled: true
-  web:
-    error:
-      include-exception: false
-      include-message: never
-      include-stacktrace: never
 
 server:
   port: ${SERVER_PORT:6060}
@@ -31,63 +20,16 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
-logging:
-  structured:
-    format:
-      console: logstash
-    json:
-      add:
-        correlationId: "%X{correlationId:-}"
-
 app:
-  outlook:
-    tenant-id: ${MICROSOFT_TENANT_ID:}
-    client-id: ${MICROSOFT_CLIENT_ID:}
-    client-secret: ${MICROSOFT_CLIENT_SECRET:}
-    authority: ${MICROSOFT_AUTHORITY:}
-    redirect-uri: ${MICROSOFT_REDIRECT_URI:}
-    app-base-url: ${APP_BASE_URL:http://localhost:5173}
-    token-encryption-key: ${MICROSOFT_TOKEN_ENCRYPTION_KEY:}
-    token-encryption-key-version: ${MICROSOFT_TOKEN_ENCRYPTION_KEY_VERSION:1}
-    connect-timeout: ${MICROSOFT_CONNECT_TIMEOUT:5s}
-    read-timeout: ${MICROSOFT_READ_TIMEOUT:10s}
-    max-retries: ${MICROSOFT_MAX_RETRIES:3}
-    max-retry-after: ${MICROSOFT_MAX_RETRY_AFTER:30s}
-    graph-base-uri: ${MICROSOFT_GRAPH_BASE_URI:https://graph.microsoft.com}
-  job:
-    discovery:
-      enabled: ${JOB_DISCOVERY_ENABLED:false}
-      poll-delay: ${JOB_DISCOVERY_POLL_DELAY:30s}
-      lease-duration: ${JOB_DISCOVERY_LEASE_DURATION:5m}
-      connect-timeout: ${MICROSOFT_CONNECT_TIMEOUT:5s}
-      read-timeout: ${MICROSOFT_READ_TIMEOUT:10s}
-      max-retries: ${MICROSOFT_MAX_RETRIES:3}
-      page-size: ${JOB_DISCOVERY_PAGE_SIZE:50}
-      max-messages-per-job: ${JOB_DISCOVERY_MAX_MESSAGES_PER_JOB:5000}
-    documents:
-      enabled: ${JOB_DOCUMENTS_ENABLED:false}
-      poll-delay: ${JOB_DOCUMENTS_POLL_DELAY:30s}
-      lease-duration: ${JOB_DOCUMENTS_LEASE_DURATION:5m}
-      max-document-bytes: ${CV_MAX_DOCUMENT_BYTES:10485760}
-      max-documents-per-job: ${CV_MAX_DOCUMENTS_PER_JOB:200}
-      max-bytes-per-job: ${CV_MAX_BYTES_PER_JOB:262144000}
-      max-attachments-per-message: ${CV_MAX_ATTACHMENTS_PER_MESSAGE:20}
-      storage-root: ${CV_STORAGE_ROOT:}
-      encryption-key: ${CV_DOCUMENT_ENCRYPTION_KEY:}
-      encryption-key-version: ${CV_DOCUMENT_ENCRYPTION_KEY_VERSION:1}
-      antivirus-mode: ${CV_ANTIVIRUS_MODE:unavailable}
-      antivirus-host: ${CLAMAV_HOST:localhost}
-      antivirus-port: ${CLAMAV_PORT:3310}
-      antivirus-timeout: ${CLAMAV_TIMEOUT:10s}
   security:
     jwt-signing-key: ${JWT_SIGNING_KEY}
+    secure-cookies: ${SECURE_COOKIES:false}
     access-token-minutes: ${ACCESS_TOKEN_MINUTES:15}
     session-hours: ${SESSION_HOURS:8}
     verification-hours: ${VERIFICATION_HOURS:24}
-    reset-minutes: ${RESET_MINUTES:30}
-    initial-admin-email: ${INITIAL_ADMIN_EMAIL:}
-    initial-admin-password: ${INITIAL_ADMIN_PASSWORD:}
     verification-resend-limit: ${VERIFICATION_RESEND_LIMIT:3}
     verification-resend-window-seconds: ${VERIFICATION_RESEND_WINDOW_SECONDS:3600}
     outbox-encryption-key: ${IDENTITY_OUTBOX_ENCRYPTION_KEY}
     outbox-encryption-key-version: ${IDENTITY_OUTBOX_ENCRYPTION_KEY_VERSION:1}
+    login-max-failed-attempts: ${LOGIN_MAX_FAILED_ATTEMPTS:5}
+    login-lock-minutes: ${LOGIN_LOCK_MINUTES:15}
