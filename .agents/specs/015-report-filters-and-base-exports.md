@@ -1,7 +1,7 @@
 # 015 - Report filters and base exports
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 008; depends on 012 and 013.
+`READY_FOR_DEV` — backend only; PRD 008; depends on 012 and 013.
 
 ## Objetivo
 Consultar una versión terminada con filtros no persistentes y producir exportaciones PDF/XLSX minimizadas del reporte completo.
@@ -18,11 +18,12 @@ Consultar una versión terminada con filtros no persistentes y producir exportac
 
 ## Comportamiento y reglas
 - Sólo `COMPLETED`/`COMPLETED_WITH_WARNINGS` permiten filtros/exportación. Los filtros afectan la respuesta de consulta, no el reporte ni la exportación.
-- Exportar ignora siempre filtros de pantalla. Incluye exactamente nombre, correo, ubicación, mandatoryScore, optionalScore, totalScore y evidencias breves permitidas. En 015 **no incluye disponibilidad**.
+- Exportar ignora siempre filtros de pantalla. Incluye exactamente nombre, correo, ubicación, disponibilidad, mandatoryScore, optionalScore, totalScore y evidencias breves permitidas. Antes de existir perfil compartido, disponibilidad es `DESCONOCIDO`; 016 la sustituye dinámicamente en exportaciones futuras.
+- `TODOS_CUMPLEN` exige que todos los obligatorios estén `CUMPLE`; `ALGUNO_NO_CUMPLE` y `ALGUNO_NO_DEMOSTRADO` exigen al menos uno en ese estado. Sin obligatorios, el primero incluye todas las entradas y los otros dos ninguna.
 - Cada solicitud crea un artefacto para esa versión; el contenido se captura al generarse. Una entrada anonimizada usa el texto prescrito y omite correo, ubicación y evidencias personales.
 
 ## Contratos
-- `GET /api/v1/report-versions/{id}/candidates?minTotalScore=&maxTotalScore=&mandatoryCompliance=&hasWarnings=&hasInsufficientEvidence=&page=&size=`. `mandatoryCompliance` es `TODOS_CUMPLEN|ALGUNO_NO_CUMPLE|ALGUNO_NO_DEMOSTRADO`; booleanos aceptan sólo `true|false`.
+- Extiende el `GET /api/v1/report-versions/{id}/candidates` de 013 con `minTotalScore=&maxTotalScore=&mandatoryCompliance=&hasWarnings=&hasInsufficientEvidence=&page=&size=` y respuesta paginada que conserva `humanStatus`/`humanStatusVersion`. `mandatoryCompliance` es `TODOS_CUMPLEN|ALGUNO_NO_CUMPLE|ALGUNO_NO_DEMOSTRADO`; booleanos aceptan sólo `true|false`.
 - `POST /api/v1/report-versions/{id}/exports` recibe `{ "format": "PDF"|"XLSX" }`, responde `202 { exportId, statusUrl }`. Doble solicitud con la misma clave `Idempotency-Key` devuelve la misma operación.
 - `GET /api/v1/exports/{exportId}` devuelve estado `QUEUED|GENERATING|COMPLETED|FAILED|EXPIRED`, expiración UTC y URL relativa de descarga sólo al completar. `GET /api/v1/exports/{exportId}/download` transmite bytes una vez autorizado.
 - `422 INVALID_REPORT_FILTER` para rango inválido/valor desconocido; `409 REPORT_NOT_COMPLETED`; `404 EXPORT_NOT_AVAILABLE` para fallida, vencida o inexistente.
@@ -57,14 +58,14 @@ Métricas de filtros, exportaciones por formato/estado/duración y purga; logs s
 - Unitarias de predicados; integración PostgreSQL de idempotencia/lease/TTL; inspección de contenido PDF/XLSX; API de roles y minimización; regresión de reporte inmutable.
 
 ## Criterios de aceptación
-- AC-008-01 a AC-008-06 se cumplen. La disponibilidad queda ausente de todo export inicial y no se modifica ninguna versión.
+- AC-008-01 a AC-008-06 se cumplen. La disponibilidad inicial de toda exportación es `DESCONOCIDO` y no se modifica ninguna versión.
 
 ## Riesgos y dependencias
 - Depende de snapshots de 012, estado de 013 y puertos de artefacto privado. 016 extiende contratos de filtro/exportación.
 
 ## Decisiones / preguntas abiertas
 - `ARCHITECTURAL DECISION`: las exportaciones son artefactos efímeros privados y durables; no son parte de `report_version` ni la mutan.
-- `ARCHITECTURAL DECISION`: disponibilidad se excluye de 015 y se añade sólo en 016 como lectura dinámica de perfil.
+- `ARCHITECTURAL DECISION`: disponibilidad es `DESCONOCIDO` hasta que 016 habilite su lectura dinámica de perfil; no forma parte de `report_version`.
 
 ## Definition of Ready
 `READY_FOR_DEV`

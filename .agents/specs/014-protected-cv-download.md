@@ -1,7 +1,7 @@
 # 014 - Protected CV download
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 007; depends on 007, 012 and 013.
+`READY_FOR_DEV` — backend only; PRD 007; depends on 007, 012 and 013.
 
 ## Objetivo
 Entregar únicamente el archivo original que una entrada de reporte usó, mediante una autorización autenticada y limitada.
@@ -32,7 +32,7 @@ Añadir `document.download-rate-limit` a `application.yml` y `DocumentProperties
 ## Datos y persistencia
 - Flyway: tabla `document_download_attempt` con UUID, `user_id`, UTC, resultado `RESERVED|COMPLETED`, `reservation_expires_at` y referencias internas de reporte/entrada/documento; índice `(user_id, created_at)` para cuota. No persistir IP, nombre, ruta ni bytes.
 - El módulo `reporting` resuelve la entrada y llama al puerto `document.openOriginalForAuthorizedDownload(documentId)`; `document` descifra y verifica fuera de controladores. Ningún módulo consulta tablas ajenas directamente.
-- Antes de abrir bytes, reservar transaccionalmente un cupo; la cuota cuenta reservas vigentes y completadas en la ventana. Tras stream completo, convertir reserva a `COMPLETED` y registrar `CV_DOWNLOADED`; un stream fallido libera su reserva.
+- Antes de abrir bytes, reservar transaccionalmente un cupo; la admisión considera `COMPLETED` y reservas vigentes para no superar el límite concurrentemente. Sólo `COMPLETED` consume cuota; tras stream completo convertir reserva y registrar `CV_DOWNLOADED`, y ante fallo liberar la reserva.
 
 ## Integraciones
 Almacenamiento privado cifrado a través del módulo `document`; no hay enlaces ni proveedor de navegador.

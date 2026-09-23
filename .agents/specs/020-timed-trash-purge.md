@@ -1,7 +1,7 @@
 # 020 - Timed trash purge
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 010; depends on 019.
+`READY_FOR_DEV` — backend only; PRD 010; depends on 019.
 
 ## Objetivo
 Purgar de forma durable los CVs que llevan 180 días en papelera y limpiar datos de perfil sin CV disponible.

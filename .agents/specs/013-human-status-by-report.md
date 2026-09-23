@@ -1,7 +1,7 @@
 # 013 - Human status by report
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 006; depends on 012.
+`READY_FOR_DEV` — backend only; PRD 006; depends on 012.
 
 ## Objetivo
 Persistir una decisión humana compartida por entrada de candidato y versión de reporte, sin alterar el snapshot ni resultados inmutables.
@@ -20,11 +20,12 @@ Persistir una decisión humana compartida por entrada de candidato y versión de
 - Toda entrada creada por 012 inicia `PENDIENTE`; el estado pertenece a la entrada, no al perfil ni al documento.
 - Cualquier transición explícita entre valores permitidos es válida. Un cambio efectivo no modifica ninguna columna del snapshot de reporte.
 - El primer `PUT` que coincide con `expectedVersion` prevalece. Una versión obsoleta no sobrescribe y obliga a recargar.
+- Sólo se modifica una entrada de versión `COMPLETED` o `COMPLETED_WITH_WARNINGS`; guardar el mismo estado no cambia versión, fecha ni auditoría.
 
 ## Contratos
 - `GET /api/v1/report-versions/{reportVersionId}/candidates` incluye `id`, ranking inmutable, `humanStatus` y `humanStatusVersion`; no expone historial.
 - `PUT /api/v1/report-versions/{reportVersionId}/candidates/{reportCandidateId}/human-status` recibe `{ "status": "EN_REVISION", "expectedVersion": 0 }` y devuelve el estado y versión nuevos.
-- Errores públicos: `404` si la versión/entrada no existe, `409 VERSION_CONFLICT` si la versión no coincide, `422 INVALID_HUMAN_STATUS` para valor inválido.
+- Errores públicos: `404` si la versión/entrada no existe, `409 VERSION_CONFLICT|REPORT_NOT_COMPLETED` si la versión no coincide o no es terminal, `422 INVALID_HUMAN_STATUS` para valor inválido.
 
 ## Configuración centralizada
 No introduce configuración externa.

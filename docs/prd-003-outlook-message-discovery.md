@@ -2,9 +2,8 @@
 
 ## Estado
 
-Borrador funcional consolidado con decisiones de producto aprobadas en la
-sesion de refinamiento. Este documento define comportamiento de producto; no
-define arquitectura ni implementacion tecnica.
+APROBADO_PARA_SPECS. Revision de arquitectura completada. Este documento define
+comportamiento de producto; no define arquitectura ni implementacion tecnica.
 
 ## Objetivo
 
@@ -94,6 +93,10 @@ El sistema no lee ni conserva:
 - Categorias.
 - Contenido de correo.
 - Adjuntos en esta fase.
+
+El remitente no se lee durante discovery. Una etapa posterior de identidad puede
+obtenerlo exclusivamente como fallback para un CV disponible, bajo los controles
+de privacidad definidos en `prd-005-extraction-ai-scoring-ranking.md`.
 
 Las referencias Outlook son internas. No aparecen en APIs, pantallas,
 exportaciones, auditoria, logs ni metricas.

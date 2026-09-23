@@ -3,6 +3,7 @@ package com.cvmatcher.cv_matcher_backend.identity.application;
 import com.cvmatcher.cv_matcher_backend.identity.SecurityProperties;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,14 +29,21 @@ public class IdentityService implements SessionRevocationPort {
     private final SecurityProperties props;
     private final JwtService jwt;
     private final MeterRegistry metrics;
+    private final VerificationOutbox verificationOutbox;
     private final Argon2PasswordEncoder encoder = Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
 
-    public IdentityService(JdbcTemplate jdbc, MailGateway mail, SecurityProperties props, JwtService jwt, MeterRegistry metrics) {
+    @Autowired
+    public IdentityService(JdbcTemplate jdbc, MailGateway mail, SecurityProperties props, JwtService jwt, MeterRegistry metrics, VerificationOutbox verificationOutbox) {
         this.jdbc = jdbc;
         this.mail = mail;
         this.props = props;
         this.jwt = jwt;
         this.metrics = metrics;
+        this.verificationOutbox = verificationOutbox;
+    }
+
+    public IdentityService(JdbcTemplate jdbc, MailGateway mail, SecurityProperties props, JwtService jwt, MeterRegistry metrics) {
+        this(jdbc, mail, props, jwt, metrics, new VerificationOutbox(jdbc, props));
     }
 
     @Override
@@ -275,6 +283,11 @@ public class IdentityService implements SessionRevocationPort {
         var raw = random();
         jdbc.update("insert into account_action_token(id,user_id,token_hash,purpose,target_email,expires_at,created_at) values(?,?,?,?,?,?,?)", UUID.randomUUID(), id, hash(raw), purpose, target, timestamp(Instant.now().plusSeconds(seconds)), timestamp(Instant.now()));
         var email = jdbc.queryForObject("select email from user_account where id=?", String.class, id);
+        if ("EMAIL_VERIFICATION".equals(purpose)) {
+            verificationOutbox.enqueue(email, raw);
+            count("identity.outbox", "purpose", purpose);
+            return;
+        }
         try {
             mail.send(new MailGateway.MailCommand(MailGateway.Purpose.valueOf(purpose), email, raw));
             count("identity.mail", "outcome", "sent", "purpose", purpose);
@@ -291,9 +304,9 @@ public class IdentityService implements SessionRevocationPort {
                 "select count(*) from verification_resend_attempt where user_id=? and requested_at>=?",
                 Long.class,
                 userId,
-                timestamp(now.minusSeconds(3600))
+                timestamp(now.minusSeconds(props.verificationResendWindowSeconds()))
         );
-        if (attempts != null && attempts >= 3) return false;
+        if (attempts != null && attempts >= props.verificationResendLimit()) return false;
 
         jdbc.update(
                 "insert into verification_resend_attempt(id,user_id,requested_at) values(?,?,?)",

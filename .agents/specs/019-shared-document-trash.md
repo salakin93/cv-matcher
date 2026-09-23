@@ -1,7 +1,7 @@
 # 019 - Shared document trash
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 010; depends on 007, 012 and 014.
+`READY_FOR_DEV` — backend only; PRD 010; depends on 007, 012 and 014.
 
 ## Objetivo
 Retirar y restaurar CVs de la operación compartida sin alterar versiones terminadas.

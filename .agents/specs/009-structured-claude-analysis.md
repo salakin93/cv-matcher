@@ -12,7 +12,7 @@ Obtener y validar evaluaciones estructuradas por requisito de Claude, tratando t
 ### Incluido
 - Minimizacion de texto, solicitud Claude, contrato JSON estricto, validacion completa, persistencia de evaluaciones y manejo de fallos por documento.
 ### Excluido
-- Extraccion, identidad, formula, ranking/reporte, seleccion ADMIN de modelo (011), UI y decisiones humanas.
+- Extraccion, identidad, formula, ranking/reporte, seleccion ADMIN de modelo (023), UI y decisiones humanas.
 
 ## Comportamiento y reglas
 - Para cada CV con texto util, enviar solo texto necesario ya minimizado y requisitos del snapshot. Antes de envio retirar nombre, correo, telefono, direccion y enlaces detectables; nunca enviar original, sender, token, ruta, hash ni datos Outlook.
@@ -23,10 +23,10 @@ Obtener y validar evaluaciones estructuradas por requisito de Claude, tratando t
 No agrega endpoint publico. Contrato interno versionado `ClaudeAnalysisRequest/Response` y JSON Schema estricto. Detalle de job/reporte posterior expone solo advertencia segura, nunca prompt, texto o payload.
 
 ## Configuracion centralizada
-`AnthropicProperties` y cliente HTTP centralizados en modulo `analysis`, con `ANTHROPIC_API_KEY`, modelo, timeout de 30 segundos, maximo de tres reintentos y maximo `Retry-After` de 60 segundos por entorno. El modelo exacto usado se entrega a 012 para snapshot; 011 solo cambia modelo permitido para trabajos futuros.
+`AnthropicProperties` y cliente HTTP centralizados en modulo `analysis`, con `ANTHROPIC_API_KEY`, modelo, timeout de 30 segundos, maximo de tres reintentos y maximo `Retry-After` de 60 segundos por entorno. El modelo exacto usado se entrega a 012 para snapshot; 023 solo cambia modelo permitido para trabajos futuros.
 
 ## Datos y persistencia
-Flyway agrega evaluacion por documento/requisito con compatibilidad, estado, evidencia, explicacion y modelo; constraint evita evaluaciones incompletas como resultado valido. Guardar solo tras validacion completa.
+Flyway agrega `document_requirement_assessment` por documento/requisito con compatibilidad, estado, evidencia, explicacion y modelo; constraint evita evaluaciones incompletas como resultado valido. Guardar solo tras validacion completa. 012 copia las evaluaciones validadas a su snapshot inmutable `requirement_assessment`.
 
 ## Integraciones
 Un unico adaptador Anthropic server-side. Llamadas fuera de transaccion; clasificar timeout/rate limit/transitorio frente a rechazo/bloqueo/contrato invalido. No usar credenciales reales en validacion.

@@ -2,9 +2,8 @@
 
 ## Estado
 
-Borrador funcional para el punto 7: descarga autenticada y autorizada del CV.
-Define únicamente la descarga del documento original asociado a un resultado de
-reporte.
+APROBADO_PARA_SPECS. Revision de arquitectura completada. Define únicamente la
+descarga del documento original asociado a un resultado de reporte.
 
 ## Objetivo
 
@@ -40,7 +39,7 @@ autenticados y autorizados para consultar el reporte correspondiente.
 | BR-007-04 | Si el documento fue eliminado, está en papelera, está dañado, no está disponible o no puede verificarse, no se entrega ningún archivo. |
 | BR-007-05 | La descarga no modifica el estado humano, perfil, disponibilidad, análisis, evidencias, score ni ranking. |
 | BR-007-06 | Cada descarga efectiva queda registrada con el usuario, fecha y referencia interna del candidato/documento para consulta exclusiva de administradores. |
-| BR-007-07 | El límite de 20 descargas por usuario cada 10 minutos se aplica antes de entregar el archivo. |
+| BR-007-07 | El límite aplica un máximo de 20 descargas completadas por usuario en una ventana móvil de 10 minutos. Solicitudes rechazadas, documentos no disponibles o streams interrumpidos no consumen cuota. |
 
 ## Fuera de alcance
 

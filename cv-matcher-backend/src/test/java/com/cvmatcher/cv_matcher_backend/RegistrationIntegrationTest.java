@@ -86,17 +86,13 @@ class RegistrationIntegrationTest {
     }
 
     @Test
-    void recordsTheTypedMailCommandAndRegistrationMetric() throws Exception {
+    void recordsTheEncryptedVerificationOutboxMessageAndRegistrationMetric() throws Exception {
         var email = "mail-command@example.test";
-        mailGateway.clear();
         var registrations = meterRegistry.counter("identity.registrations").count();
 
         register(email);
 
-        var command = mailGateway.sentCommands().getFirst();
-        assertEquals(com.cvmatcher.cv_matcher_backend.identity.application.MailGateway.Purpose.EMAIL_VERIFICATION, command.purpose());
-        assertEquals(email, command.recipient());
-        assertFalse(command.opaqueToken().isBlank());
+        assertEquals(1L, jdbc.queryForObject("select count(*) from outbox_message where recipient=? and purpose='EMAIL_VERIFICATION'", Long.class, email));
         assertEquals(registrations + 1, meterRegistry.counter("identity.registrations").count());
     }
 
@@ -394,18 +390,17 @@ class RegistrationIntegrationTest {
     }
 
     @Test
-    void countsMailDeliveryFailuresWithoutPersistingTheRegistration() {
+    void keepsRegistrationWhenSynchronousMailWouldFail() {
         var email = "mail-failure@example.test";
-        var failures = meterRegistry.counter("identity.mail", "outcome", "failure", "purpose", "EMAIL_VERIFICATION").count();
         var failingService = new IdentityService(jdbc, command -> {
             throw new IllegalStateException("mail unavailable");
         }, securityProperties, jwt, meterRegistry);
 
-        assertThrows(IllegalStateException.class, () -> new TransactionTemplate(transactionManager)
-                .executeWithoutResult(status -> failingService.register("Recruiter Test", email, "ClaveSegura1")));
+        new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> failingService.register("Recruiter Test", email, "ClaveSegura1"));
 
-        assertEquals(failures + 1, meterRegistry.counter("identity.mail", "outcome", "failure", "purpose", "EMAIL_VERIFICATION").count());
-        assertEquals(0L, jdbc.queryForObject("select count(*) from user_account where email_normalized=?", Long.class, email));
+        assertEquals(1L, jdbc.queryForObject("select count(*) from user_account where email_normalized=?", Long.class, email));
+        assertEquals(1L, jdbc.queryForObject("select count(*) from outbox_message where recipient=?", Long.class, email));
     }
 
     @Test

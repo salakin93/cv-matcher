@@ -87,3 +87,7 @@ app:
     reset-minutes: ${RESET_MINUTES:30}
     initial-admin-email: ${INITIAL_ADMIN_EMAIL:}
     initial-admin-password: ${INITIAL_ADMIN_PASSWORD:}
+    verification-resend-limit: ${VERIFICATION_RESEND_LIMIT:3}
+    verification-resend-window-seconds: ${VERIFICATION_RESEND_WINDOW_SECONDS:3600}
+    outbox-encryption-key: ${IDENTITY_OUTBOX_ENCRYPTION_KEY}
+    outbox-encryption-key-version: ${IDENTITY_OUTBOX_ENCRYPTION_KEY_VERSION:1}

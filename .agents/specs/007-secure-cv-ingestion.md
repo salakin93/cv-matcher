@@ -15,9 +15,10 @@ Descargar y conservar solo CVs PDF/DOCX limpios, cifrados y disponibles para ext
 - Extraccion, OCR, descarga del usuario, identidad de persona, analisis/ranking y UI.
 
 ## Comportamiento y reglas
-- En `INGESTING_DOCUMENTS`, revisar maximo dos adjuntos por mensaje. Solo `fileAttachment` no inline/item/reference cuyo nombre temporal coincida sin acento/caso con `cv`, `hoja de vida`, `curriculum`, `resume` o `résumé` se descarga.
-- Limites: 10 MiB por archivo y 500 MiB acumulados por job; alcanzar limites agrega advertencia y conserva resultados validos previos.
-- Validar tipo real PDF/DOCX, no vacio/corrupto/protegido y ClamAV limpio antes de cifrar AES-256-GCM en storage privado. Malware se cuarentena; AV/storage no disponible ignora solo el archivo.
+- Solo el worker con lease de un job `INGESTING_DOCUMENTS` inicia esta etapa; cancelacion, replay o recuperacion no duplican documentos ni conteos. El worker se detiene tan pronto sea seguro al cancelar.
+- Consulta metadatos minimos y selecciona como maximo dos `fileAttachment` no inline/item/reference por mensaje cuyo nombre temporal sea candidato. `cv` coincide como subcadena; `hoja de vida`, `curriculum`, `resume` y `résumé` ignoran caso y acentos. Si hay mas candidatos, registra `MESSAGE_ATTACHMENT_LIMIT_REACHED` sin descargar ni persistir sus nombres.
+- Limites: 10 MiB por archivo y 500 MiB acumulados descargados por job, sin limite funcional de documentos. Al alcanzar 500 MiB deja de descargar adjuntos nuevos, registra `JOB_BYTE_LIMIT_REACHED` y conserva resultados validos previos con alcance parcial.
+- Validar tipo real PDF/DOCX, no vacio/corrupto/protegido y ClamAV limpio antes de cifrar AES-256-GCM en storage privado. Malware se cuarentena; AV no disponible o fallo de cifrado/storage ignora solo el archivo, limpia temporales y permite continuar.
 - Mismo adjunto no se reprocesa; contenido igual entre mensajes conserva el primero. Si queda alguno disponible avanza a `ANALYZING`; si ninguno, `FAILED/NO_VALID_CV_DOCUMENTS`.
 
 ## Contratos API
@@ -30,10 +31,10 @@ No agrega endpoint publico. Detalle job expone conteos aceptado/ignorado/cuarent
 Flyway agrega `candidate_document`/registro de procesamiento con estado, formato real, tamano, recepcion, hash tecnico, referencia opaca y version de clave. Bytes no van a PostgreSQL; nombre, MIME declarado, URL/ruta publica e IDs Outlook no persisten en claro.
 
 ## Integraciones
-Descarga por adaptador Graph y escaneo por adaptador ClamAV fuera de transacciones. Limpiar temporales ante fallo; no llamar Claude.
+Descarga por adaptador Graph y escaneo por adaptador ClamAV fuera de transacciones. La descarga solicita el nombre solo para el filtro temporal; no llamar Claude. Limpiar temporales ante fallo.
 
 ## Errores y estados
-Usar motivos seguros definidos por PRD: `NOT_CV_FILENAME`, `FILE_TOO_LARGE`, `EMPTY_DOCUMENT`, `UNSUPPORTED_FORMAT`, `CORRUPT_DOCUMENT`, `PASSWORD_PROTECTED`, `MALWARE_DETECTED`, `ANTIVIRUS_UNAVAILABLE`, `STORAGE_UNAVAILABLE`, `DUPLICATE_CONTENT`; y advertencias de limites. Cancelacion no publica ranking.
+Usar motivos seguros definidos por PRD: `NOT_CV_FILENAME`, `FILE_TOO_LARGE`, `EMPTY_DOCUMENT`, `UNSUPPORTED_FORMAT`, `CORRUPT_DOCUMENT`, `PASSWORD_PROTECTED`, `MALWARE_DETECTED`, `ANTIVIRUS_UNAVAILABLE`, `STORAGE_UNAVAILABLE`, `DUPLICATE_CONTENT`; y advertencias `MESSAGE_ATTACHMENT_LIMIT_REACHED`/`JOB_BYTE_LIMIT_REACHED`. Cancelacion no publica ranking ni reporte parcial.
 
 ## Seguridad y privacidad
 No persistir ni loguear nombre temporal, bytes, ruta, hash o respuesta AV. Documentos disponibles y metadatos sensibles usan controles de acceso/cifrado de arquitectura.
@@ -50,7 +51,7 @@ Pruebas de parsers/tipo, limites y limpieza; integracion storage cifrado/ClamAV 
 ## Criterios de aceptacion
 1. Solo adjuntos elegibles se descargan y solo limpios quedan disponibles.
 2. Ningun nombre, ID, hash, ruta o contenido se expone.
-3. Limites por mensaje/archivo/job generan resultado parcial seguro.
+3. Cada mensaje descarga como maximo dos candidatos y cada job como maximo 500 MiB; los limites generan resultado parcial seguro.
 4. Malware se cuarentena y fallos AV/storage no bloquean otros adjuntos.
 5. Sin CV disponible, job falla con `NO_VALID_CV_DOCUMENTS`.
 

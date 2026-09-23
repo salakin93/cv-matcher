@@ -2,9 +2,8 @@
 
 ## Estado
 
-Borrador funcional consolidado con decisiones de producto aprobadas en la
-sesion de refinamiento. Este documento define comportamiento de producto; no
-define arquitectura ni implementacion tecnica.
+APROBADO_PARA_SPECS. Revision de arquitectura completada. Este documento define
+comportamiento de producto; no define arquitectura ni implementacion tecnica.
 
 ## Objetivo
 
@@ -105,8 +104,10 @@ solicitud.
 - Crear un job responde inmediatamente; no espera Outlook, descarga de archivos,
   IA ni ranking.
 - El job inicia en `QUEUED`.
-- Cada job conserva una copia inmutable de titulo, rango de recepcion y
-  requisitos, incluidos pesos, obligatoriedad y orden.
+- Cada job conserva una copia inmutable de titulo, rango de recepcion,
+  requisitos, incluidos pesos, obligatoriedad y orden, y el umbral elegido.
+- El reclutador puede elegir un umbral entero entre 0 y 100 al crear el job; el
+  valor propuesto es 70.
 - Editar, archivar o reactivar la vacante no modifica jobs ya creados.
 
 | Caso | Resultado |
@@ -129,6 +130,8 @@ Un job es activo mientras este en:
 Reglas:
 
 - Una vacante solo puede tener un job activo.
+- La cantidad global de jobs procesados simultaneamente es una configuracion
+  server-side. Cuando se alcance, los jobs adicionales permanecen en `QUEUED`.
 - Cuando el job llega a un estado terminal, la vacante puede crear otro.
 - Los estados terminales son `COMPLETED`, `COMPLETED_WITH_WARNINGS`, `FAILED`,
   `REAUTHORIZATION_REQUIRED` y `CANCELLED`.
@@ -170,6 +173,8 @@ hashes, contenido de CV ni datos internos de proveedores.
 - Un job `CANCELLED` no se reintenta; se crea un job nuevo desde la vacante.
 - El retry crea un nuevo job `QUEUED`.
 - El nuevo job conserva el snapshot del job anterior.
+- El retry conserva el umbral del job anterior. Para usar otro umbral se crea un
+  job nuevo desde la vacante.
 - El historial anterior no se modifica.
 - No existe un limite funcional de reintentos manuales.
 - Si existe otro job activo para la vacante, el retry no puede crear uno nuevo.

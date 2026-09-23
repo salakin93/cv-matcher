@@ -2,8 +2,8 @@
 
 ## Estado
 
-Borrador funcional consolidado con decisiones de producto aprobadas en la
-sesion de refinamiento. Este documento define comportamiento de producto; no
+APROBADO_PARA_SPECS. Revision de arquitectura completada. Este documento define
+comportamiento de producto; no define arquitectura ni implementacion tecnica.
 
 ## Objetivo
 
@@ -33,19 +33,19 @@ La identidad se resuelve en este orden:
 
 1. Correo extraido del texto del CV.
 2. Correo remitente del mensaje, solo si no existe correo valido en el CV.
-3. Nombre extraido del CV normalizado, solo si no existe un correo valido.
+3. Candidato anonimo independiente, si no existe un correo valido.
 
 ### Reglas
 
-- Correo y nombre se conservan cifrados.
+- El correo se conserva cifrado.
 - No se exponen remitente, hashes, IDs Outlook ni fuentes internas de identidad.
 - Dos CVs con el mismo correo se consideran la misma persona.
-- Si no existe correo extraido ni correo remitente, dos CVs con el mismo nombre
-  normalizado se consideran la misma persona.
 - Para una misma persona se usa el CV mas reciente.
 - Si las fechas de dos CVs empatan, se usa un identificador interno estable.
-- Un CV sin correo ni nombre util entra como `Candidato anonimo`.
-- Varios candidatos anonimos aparecen como entradas separadas, una por documento.
+- Todo CV sin correo extraido ni correo remitente entra como `Candidato anonimo`,
+  incluso si contiene un nombre util.
+- Varios candidatos anonimos aparecen como entradas separadas, una por documento;
+  nunca se deduplican por nombre ni similitud.
 
 ## 3. Envio a Claude
 
@@ -157,7 +157,7 @@ El frontend no recalcula scores ni resuelve empates.
 | --- | --- |
 | Candidatos evaluados sin advertencias | `COMPLETED`. |
 | Candidatos evaluados con advertencias | `COMPLETED_WITH_WARNINGS`. |
-| No existe candidato rankeable | `COMPLETED_WITH_WARNINGS`, sin crear reporte vacio; el detalle del job muestra advertencia segura. |
+| No existe candidato rankeable | `COMPLETED_WITH_WARNINGS` con `NO_RANKABLE_CANDIDATES`, sin crear reporte vacio. |
 | Job cancelado | `CANCELLED`, sin reporte. |
 
 ## 10. Informacion Visible para Reclutadores
@@ -192,8 +192,8 @@ indicadas y no bloquean la implementación ni revisión:
 - PRD y Spec 012: sin candidatos rankeables termina `COMPLETED_WITH_WARNINGS`,
   no `FAILED`.
 - Spec 009: Claude recibe texto minimizado sin identificadores.
-- Spec 011: deduplicar por correo extraido, correo remitente o nombre
-  normalizado; candidatos sin identidad entran como anonimos independientes.
+- Spec 011: deduplicar solo por correo extraido o correo remitente; candidatos
+  sin correo entran como anonimos independientes.
 - Specs 008-012: reflejar conteos, advertencias y comportamiento de CVs sin
   texto util.
 

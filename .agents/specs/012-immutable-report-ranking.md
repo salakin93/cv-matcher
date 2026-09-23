@@ -21,14 +21,14 @@ Publicar como maximo una version de reporte inmutable por job con ranking explic
 - Si hay evaluados: `COMPLETED` o `COMPLETED_WITH_WARNINGS`. Si no hay candidato rankeable: `COMPLETED_WITH_WARNINGS`, sin reporte vacio, con advertencia segura. Cancelado no crea reporte.
 
 ## Contratos API
-- `GET /api/v1/reports/{reportId}` y listado por vacante/job devuelven version, resumen, ranking, Top 5, umbral, scores, cumplimiento, evidencia/explicacion y advertencias permitidas.
-- No devolver texto CV, sender, prompt/payload, tokens, hashes, rutas, IDs internos o documento. `404` seguro cuando no existe/no autorizado; no permitir editar/recalcular.
+- `GET /api/v1/report-versions/{reportVersionId}`, `GET /api/v1/vacancies/{vacancyId}/report-versions` y `GET /api/v1/report-jobs/{jobId}/report-version` devuelven version, resumen, ranking, Top 5, umbral, scores, cumplimiento, evidencia/explicacion y advertencias permitidas.
+- No devolver texto CV, sender, prompt/payload, tokens, hashes, rutas, IDs Graph/almacenamiento ni documento. Los identificadores de recursos autorizados se definen por sus specs consumidoras. `404` seguro cuando no existe/no autorizado; no permitir editar/recalcular.
 
 ## Configuracion centralizada
-No agrega configuracion. Reglas de ranking/score provienen de 010 y se conservan por version en snapshot; modelo actual se selecciona por configuracion central de 011 para jobs futuros.
+No agrega configuracion. Reglas de ranking/score provienen de 010 y se conservan por version en snapshot; modelo actual se selecciona por configuracion central de 023 para jobs futuros.
 
 ## Datos y persistencia
-Flyway agrega `report_version`, `report_candidate` y `requirement_assessment` inmutables, vinculados al job. Constraint garantiza maximo un reporte no vacio por job; transicion final y publicacion son atomicas. No copiar texto CV ni datos tecnicos.
+Flyway agrega `report_version`, `report_candidate` y `requirement_assessment` inmutables, vinculados al job. `report_candidate` conserva referencia inmutable a `candidate_document` y `candidate_profile` nullable; `requirement_assessment` es copia snapshot de `document_requirement_assessment`. Constraint garantiza maximo un reporte no vacio por job; transicion final y publicacion son atomicas. No copiar texto CV ni datos tecnicos.
 
 ## Integraciones
 No llama proveedores. Consume resultados persistidos de 009--011 y actualiza job 004 en transaccion breve.

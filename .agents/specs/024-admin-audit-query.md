@@ -1,7 +1,7 @@
 # 024 - Admin audit query
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 011; depends on audit producers 002 and 013–023 where applicable.
+`READY_FOR_DEV` — backend only; PRD 011; depends on audit producers 002 and 013–023 where applicable.
 
 ## Objetivo
 Exponer a ADMIN una consulta paginada y filtrable de eventos auditables inmutables, con referencias seguras y minimización de datos.

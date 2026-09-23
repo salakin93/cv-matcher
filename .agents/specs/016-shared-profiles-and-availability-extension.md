@@ -1,7 +1,7 @@
 # 016 - Shared profiles and availability extension
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 009; depends on 011, 012 and 015.
+`READY_FOR_DEV` — backend only; PRD 009; depends on 011, 012 and 015.
 
 ## Objetivo
 Mantener perfiles compartidos y extender consulta/exportación de reportes con disponibilidad actual, sin reescribir reportes inmutables.
@@ -18,19 +18,19 @@ Mantener perfiles compartidos y extender consulta/exportación de reportes con d
 
 ## Comportamiento y reglas
 - La disponibilidad inicial y fallback es `DESCONOCIDO`; valores: `DISPONIBLE`, `NO_DISPONIBLE`, `DESCONOCIDO`.
-- Ubicación y habilidades originales se conservan; la corrección actual reemplaza sólo la vista de perfil y búsquedas futuras. Cambios concurrentes usan `expectedVersion` y el primero confirmado gana.
+- Ubicación y habilidades inician vacías; cada corrección conserva el valor anterior y reemplaza sólo la vista de perfil y búsquedas futuras. Cambios concurrentes usan `expectedVersion` y el primero confirmado gana.
 - `availability` y texto de perfil son joins de lectura actuales sobre entradas de un reporte. El filtro multi-valor coincide con cualquiera y se combina por `Y` con 015. Las exportaciones solicitadas desde 016 incluyen disponibilidad actual o `DESCONOCIDO` al generarse; artefactos ya generados por 015 no se regeneran.
 
 ## Contratos
-- `GET /api/v1/candidate-profiles/{id}` y `PUT` con `{ availability, location?, skills?, expectedVersion }`; respuesta incluye valores actuales, valores originales permitidos, `version` y UTC, no CV/texto extraído.
-- Extender candidates de reporte con `availability` y query `availability=DISPONIBLE,DESCONOCIDO`, `query=<texto>`; `query` busca nombre, correo o habilidades de las propias entradas, normalizado, máximo 100 caracteres.
+- `GET /api/v1/candidate-profiles/{id}` y `PUT` con `{ availability, location?, skills?, expectedVersion }`; respuesta incluye valores actuales, último valor anterior permitido, `version` y UTC, no CV/texto extraído.
+- Extender candidates de reporte con `candidateProfileId?`, `availability` y query `availability=DISPONIBLE,DESCONOCIDO`, `query=<texto>`; `candidateProfileId` es el identificador de recurso autorizado y es nulo para anonimos. `query` busca nombre, correo o habilidades de las propias entradas, normalizado, máximo 100 caracteres.
 - Extender exportación 015 para que PDF/XLSX incluya `availability`. `422 INVALID_PROFILE_UPDATE|INVALID_AVAILABILITY_FILTER|INVALID_REPORT_QUERY`; `409 VERSION_CONFLICT`.
 
 ## Configuración centralizada
 No introduce configuración externa. Límites de página y query reutilizan propiedades centralizadas de API si existen; no crear constantes duplicadas.
 
 ## Datos y persistencia
-- Flyway: completar `candidate_profile` con disponibilidad default `DESCONOCIDO`, origen de ubicación/habilidades, valores corregidos, `version`; crear `candidate_profile_correction` con perfil, campo, valor original/corregido protegido, actor y UTC. Índices por disponibilidad y perfil.
+- Flyway: completar `candidate_profile` con disponibilidad default `DESCONOCIDO`, ubicación/habilidades inicialmente nulas, valores actuales y `version`; crear `candidate_profile_correction` con perfil, campo, valor anterior/corregido protegido, actor y UTC. Índices por disponibilidad y perfil.
 - `candidate` posee perfiles y publica DTO/puerto de lectura; `reporting` no accede sus tablas y resuelve disponibilidad por puerto en consulta/exportación.
 - Auditar cambios efectivos (`PROFILE_AVAILABILITY_CHANGED`, `PROFILE_LOCATION_CORRECTED`, `PROFILE_SKILLS_CORRECTED`) en la transacción de actualización.
 

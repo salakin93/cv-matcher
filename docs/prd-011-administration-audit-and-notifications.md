@@ -1,5 +1,9 @@
 # PRD - Operacion Administrativa, Auditoria y Notificaciones
 
+## Estado
+
+APROBADO_PARA_SPECS. Revision de arquitectura completada.
+
 ## Objetivo
 
 Permitir operar parámetros seguros, revisar acciones sensibles y comunicar el
@@ -12,8 +16,10 @@ resultado de trabajos sin exponer secretos, CVs ni datos personales.
   futuros y definir la concurrencia global de jobs.
 - El modelo se elige de una lista permitida por el servidor. La concurrencia
   es un entero entre 1 y 10; el valor inicial es 1.
-- Un cambio afecta únicamente análisis y jobs futuros; no modifica reportes,
-  análisis ni jobs ya iniciados.
+- El modelo queda en el snapshot de cada job al crearse; un cambio afecta sólo
+  jobs creados después y no modifica reportes, análisis ni jobs ya creados.
+- Un cambio de concurrencia no interrumpe jobs activos; se aplica a los próximos
+  claims de workers, incluidos jobs ya en cola.
 - La pantalla puede mostrar el estado de Outlook y Claude, pero nunca tokens,
   secretos, claves, payloads de proveedores ni configuración técnica sensible.
 - Cada cambio efectivo de configuración se audita.
@@ -41,10 +47,16 @@ resultado de trabajos sin exponer secretos, CVs ni datos personales.
   técnicos de fallos.
 - Para `REAUTHORIZATION_REQUIRED`, la notificación indica que un `ADMIN` debe
   actuar, sin detalles técnicos.
+- `REAUTHORIZATION_REQUIRED` notifica al solicitante activo y a todos los
+  `ADMIN`. Los avisos de `ADMIN` no incluyen datos del job ni del solicitante.
 - Las notificaciones internas pueden marcarse como leídas. Marcar una
   notificación no modifica el job, reporte ni candidatos.
 - El envío de correo fallido no revierte un job ya terminado; se intenta de
   acuerdo con el mecanismo durable de notificaciones.
+- Cada destinatario recibe como máximo una notificación interna y un correo por
+  estado terminal de un job, aunque existan replays o reintentos técnicos.
+- Si el solicitante fue desactivado antes del estado terminal, no recibe correo
+  ni notificación interna.
 
 ## Fuera de alcance
 

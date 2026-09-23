@@ -16,16 +16,16 @@ Crear, consultar, cancelar, reintentar y recuperar jobs de reporte sin esperar t
 
 ## Comportamiento y reglas
 - Solo vacante `ACTIVE` sin job activo crea job. Activos: `QUEUED`, `DISCOVERING`, `INGESTING_DOCUMENTS`, `ANALYZING`; terminales: `COMPLETED`, `COMPLETED_WITH_WARNINGS`, `FAILED`, `REAUTHORIZATION_REQUIRED`, `CANCELLED`.
-- Crear y retry capturan titulo, rango, requisitos/pesos/orden y umbral entero 0--100 (default sugerido 70) inmutables. Retry solo de `FAILED`/`REAUTHORIZATION_REQUIRED`, crea nuevo `QUEUED` con el snapshot anterior.
-- Cancelar activo es idempotente; worker se detiene seguro y no publica reporte parcial. Claim/lease y checkpoints impiden doble proceso y recuperan leases vencidos.
+- Crear y retry capturan titulo, rango, requisitos/pesos/orden y umbral entero 0--100 (default 70) inmutables. Retry solo de `FAILED`/`REAUTHORIZATION_REQUIRED`, crea nuevo `QUEUED` con el snapshot y umbral anteriores; no tiene limite funcional. Un retry tras `REAUTHORIZATION_REQUIRED` exige que un `ADMIN` haya resuelto antes la conexion Outlook de su alcance.
+- Cancelar activo es idempotente; worker se detiene seguro, conserva datos tecnicos ya persistidos y no publica reporte parcial. Claim/lease y checkpoints impiden doble proceso y recuperan leases vencidos sin duplicar documentos, conteos o transiciones finales.
 
 ## Contratos API
 - `POST /api/v1/vacancies/{id}/report-jobs` responde `202` con `jobId`, snapshot/resumen y URL de estado.
-- `GET /api/v1/vacancies/{id}/report-jobs`, `GET /api/v1/report-jobs/{id}`, `POST .../cancel|retry`.
+- `GET /api/v1/vacancies/{id}/report-jobs?status=` admite filtro de estado; `GET /api/v1/report-jobs/{id}`, `POST /api/v1/report-jobs/{id}/cancel`, `POST /api/v1/report-jobs/{id}/retry`.
 - Estado muestra intento, fechas, conteos agregados, advertencias y codigo seguro; nunca lease, snapshot sensible, IDs proveedor o PII.
 
 ## Configuracion centralizada
-`JobProperties` en `application.yml` concentra concurrencia global (inicial 1), duracion/renovacion de lease y recuperacion. La futura API ADMIN de 011 modifica solo el valor permitido de concurrencia mediante este SSOT.
+`JobProperties` en `application.yml` concentra concurrencia global (inicial 1), duracion/renovacion de lease y recuperacion. Al alcanzar la concurrencia, los jobs adicionales permanecen `QUEUED`. La futura API ADMIN de 011 modifica solo el valor permitido de concurrencia mediante este SSOT.
 
 ## Datos y persistencia
 Flyway agrega `matching_job`, snapshot normalizado/serializado inmutable y `matching_job_event`; constraint parcial/estrategia equivalente garantiza un activo por vacante. Persistir claim, lease, intento y contadores en transacciones cortas.
@@ -34,7 +34,7 @@ Flyway agrega `matching_job`, snapshot normalizado/serializado inmutable y `matc
 No llama Graph/Claude ni SMTP. Expone los puntos de transicion para los workers de 006--012.
 
 ## Errores y estados
-Carrera de creacion/retry con job activo retorna `409`. Vacante archivada/inexistente devuelve `409`/`404`. Transiciones invalidas no alteran historial; terminales no se reclaman automaticamente.
+Carrera de creacion/retry con job activo retorna `409`. Vacante archivada/inexistente devuelve `409`/`404`. Transiciones invalidas no alteran historial; terminales no se reclaman automaticamente. Cancelar un terminal no altera su historial, fechas ni auditoria.
 
 ## Seguridad y privacidad
 Solo roles activos autorizados para vacantes compartidas. Snapshots y eventos no incluyen CV, texto, correo, tokens o datos de proveedor.

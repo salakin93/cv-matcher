@@ -121,7 +121,7 @@ public class AuthController {
         service.requestToken(request.email(), "PASSWORD_RESET", null);
     }
 
-    @PostMapping("/email-verification/resend")
+    @PostMapping({"/resend-verification", "/email-verification/resend"})
     @ResponseStatus(HttpStatus.ACCEPTED)
     @Operation(summary = "Reenviar verificación", description = "Máximo tres reenvíos por cuenta y hora. La respuesta es neutral.")
     @ApiResponses({
@@ -132,7 +132,7 @@ public class AuthController {
         service.requestToken(request.email(), "EMAIL_VERIFICATION", null);
     }
 
-    @PostMapping("/email-verification/confirm")
+    @PostMapping({"/verify-email", "/email-verification/confirm"})
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Confirmar correo")
     @ApiResponses({

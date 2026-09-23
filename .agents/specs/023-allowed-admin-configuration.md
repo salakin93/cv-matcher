@@ -1,7 +1,7 @@
 # 023 - Allowed admin configuration
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 011; depends on 004, 005 and 009.
+`READY_FOR_DEV` — backend only; PRD 011; depends on 004, 005 and 009.
 
 ## Objetivo
 Permitir a ADMIN consultar estado seguro de integraciones y cambiar sólo modelo AI allowlisted y concurrencia global futura.
@@ -12,13 +12,13 @@ Permitir a ADMIN consultar estado seguro de integraciones y cambiar sólo modelo
 ## Alcance
 ### Incluido
 - Lectura ADMIN de salud segura Outlook/Claude, lista server-side de modelos permitidos y configuración actual.
-- Cambio versionado/auditado de modelo futuro y concurrencia global entera `1..10`, default `1`, aplicable solo a jobs creados despues del cambio.
+- Cambio versionado/auditado de modelo futuro y concurrencia global entera `1..10`, default `1`, aplicable a los próximos claims, incluidos jobs ya en cola.
 ### Excluido
-- Editar secretos, tokens, tenant, rutas, timeout, límites de documento, SMTP, políticas de acceso o jobs ya creados, incluidos los que permanezcan en cola.
+- Editar secretos, tokens, tenant, rutas, timeout, límites de documento, SMTP, políticas de acceso o snapshots de modelo de jobs ya creados.
 
 ## Comportamiento y reglas
-- El modelo debe pertenecer a la allowlist derivada de configuración server-side. Un cambio afecta sólo jobs creados después de commit; cada job captura su modelo y límite de concurrencia efectivos al crearse.
-- La concurrencia es un entero inclusivo 1–10, default 1. Un cambio aplica sólo a jobs creados después de su commit; jobs ya creados, incluso en cola, conservan el límite capturado al crearse.
+- El modelo debe pertenecer a la allowlist derivada de configuración server-side. Un cambio afecta sólo jobs creados después de commit; cada job captura su modelo efectivo al crearse.
+- La concurrencia es un entero inclusivo 1–10, default 1. Un cambio no interrumpe jobs activos y aplica a los próximos claims, incluidos jobs ya en cola; no es un valor capturado por job.
 - Health sólo devuelve estado `CONNECTED|NOT_CONNECTED|REAUTHORIZATION_REQUIRED|UNAVAILABLE` y fecha de comprobación; nunca configuración técnica o proveedor payload.
 
 ## Contratos
@@ -32,7 +32,7 @@ Permitir a ADMIN consultar estado seguro de integraciones y cambiar sólo modelo
 
 ## Datos y persistencia
 - Flyway: singleton `system_operational_configuration` con modelo, concurrencia, `version`, timestamps/actor; insertar fila inicial con concurrencia `1` y modelo válido de allowlist. Constraint `global_job_concurrency between 1 and 10`.
-- `administration` posee mutación; `job` captura el límite efectivo al crearse y `analysis` recibe el modelo snapshot desde job. Auditar `OPERATIONAL_CONFIGURATION_CHANGED` en misma transacción con cambios permitidos, no secretos.
+- `administration` posee mutación; `job` consulta la concurrencia vigente al reclamar y `analysis` recibe el modelo snapshot desde job. Auditar `OPERATIONAL_CONFIGURATION_CHANGED` en misma transacción con cambios permitidos, no secretos.
 
 ## Integraciones
 Usar puertos Outlook/analysis sólo para health redactada; no realizar OAuth ni llamadas Claude de prueba al consultar.
@@ -49,7 +49,7 @@ Contadores de cambios/conflictos, gauge de concurrencia configurada y logs con a
 
 ## Estrategia de pruebas
 ### Validación manual
-- Con ADMIN, cambiar modelo permitido y concurrencia 1, 10; confirmar que sólo jobs creados después del cambio toman los valores nuevos y que jobs ya creados, incluso en cola, no cambian. Probar 0, 11, modelo ajeno, conflicto y recruiter.
+- Con ADMIN, cambiar modelo permitido y concurrencia 1, 10; confirmar que sólo jobs creados después del cambio toman el modelo nuevo y que la concurrencia nueva gobierna los próximos claims, incluidos jobs en cola, sin interrumpir activos. Probar 0, 11, modelo ajeno, conflicto y recruiter.
 - Verificar que health no muestra tokens/secrets y existe auditoría.
 ### Backlog de automatización diferida
 - Migración/default/constraint; API RBAC/versión/allowlist; integración de claim concurrente y snapshot de modelo; prueba de redacción de health/auditoría.

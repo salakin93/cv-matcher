@@ -2,10 +2,10 @@
 
 ## Estado
 
-Borrador funcional para el punto 6: Revision Humana, Documentos y
-Exportaciones. Define unicamente los filtros del ranking y las exportaciones.
-El estado humano se define en `docs/prd-006-human-status-by-report.md` y la
-descarga protegida en `docs/prd-007-protected-cv-download.md`.
+APROBADO_PARA_SPECS. Revision de arquitectura completada. Define unicamente los
+filtros del ranking y las exportaciones. El estado humano se define en
+`docs/prd-006-human-status-by-report.md` y la descarga protegida en
+`docs/prd-007-protected-cv-download.md`.
 
 ## Objetivo
 
@@ -36,6 +36,8 @@ filtros y solicitar una exportacion del reporte que estan autorizados a ver.
 - `TODOS_CUMPLEN` muestra entradas cuyos requisitos obligatorios estan todos en
   estado `CUMPLE`. `ALGUNO_NO_CUMPLE` y `ALGUNO_NO_DEMOSTRADO` muestran
   entradas con al menos un requisito obligatorio en el estado indicado.
+- Si la vacante no tiene requisitos obligatorios, `TODOS_CUMPLEN` muestra todas
+  las entradas y las otras dos opciones no muestran ninguna.
 - El filtro de advertencias muestra solo entradas que tienen una o mas
   advertencias seguras en el reporte.
 - El filtro de evidencia insuficiente muestra solo entradas con al menos un
@@ -54,10 +56,11 @@ junto con el perfil compartido en la funcionalidad 7.
 - La exportacion siempre incluye todas las entradas del reporte, sin considerar
   los filtros activos de la pantalla.
 - Por cada entrada, PDF y XLSX incluyen solamente: nombre, correo, ubicacion,
-  puntaje obligatorio, puntaje opcional, puntaje total y evidencias breves por
-  requisito.
-- La disponibilidad no se incluye hasta que la funcionalidad 7 la administre
-  como dato de perfil compartido.
+  disponibilidad, puntaje obligatorio, puntaje opcional, puntaje total y
+  evidencias breves por requisito.
+- Antes de existir perfil compartido, disponibilidad se exporta como
+  `DESCONOCIDO`. Después se usa la disponibilidad compartida vigente, sin
+  modificar el reporte inmutable.
 - Una exportacion no incluye CVs, texto extraido, telefono, direccion,
   atributos sensibles, estado humano, rutas, enlaces de descarga, IDs internos
   ni metadatos tecnicos del documento.

@@ -2,9 +2,8 @@
 
 ## Estado
 
-Borrador funcional consolidado con decisiones de producto aprobadas en la
-sesion de refinamiento. Este documento define el alcance funcional; no define
-la arquitectura ni la implementacion tecnica.
+APROBADO_PARA_SPECS. Revision de arquitectura completada. Este documento define
+el alcance funcional; no define la arquitectura ni la implementacion tecnica.
 
 ## Objetivo
 
@@ -205,8 +204,8 @@ contrasena, tokens, enlaces ni secretos.
 
 **FR-ACC-034.** Se auditan: provisionamiento del primer administrador,
 verificacion de correo, bloqueo y desbloqueo, recuperacion completada, cambios
-de contrasena o correo, cambios de rol, activacion, desactivacion y
-reautorizaciones sensibles de integraciones en su incremento correspondiente.
+de contrasena o correo, cambios de rol, activacion y desactivacion. Las
+reautorizaciones de integraciones se auditan en su alcance funcional propio.
 
 ## Reglas de negocio
 

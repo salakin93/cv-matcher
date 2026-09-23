@@ -1,7 +1,7 @@
 # 017 - Historical search eligibility and confirmation
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 009; depends on 012 and 016.
+`READY_FOR_DEV` — backend only; PRD 009; depends on 012 and 016.
 
 ## Objetivo
 Autorizar explícitamente una intención de búsqueda histórica sólo cuando la versión origen no alcanza su umbral, sin analizar CV alguno.
@@ -30,7 +30,7 @@ Autorizar explícitamente una intención de búsqueda histórica sólo cuando la
 La sugerencia `70` reutiliza el valor de negocio persisted threshold por defecto definido por `vacancy`; no es configuración ADMIN ni se duplica en frontend.
 
 ## Datos y persistencia
-- Flyway: `historical_search_confirmation` con UUID, report_version_origen, vacancy, requester, snapshot JSON validado sin PII nueva, estado `CONFIRMED|CONSUMED|INVALIDATED`, idempotency key, UTC y versionado. Constraint único de idempotencia por solicitante.
+- Flyway: `historical_search_confirmation` con UUID, report_version_origen, vacancy, requester, snapshot de filtros validado y cifrado cuando contenga nombre, correo, ubicación o términos, estado `CONFIRMED|CONSUMED|INVALIDATED`, idempotency key, UTC y versionado. Constraint único de idempotencia por solicitante.
 - `candidate` expone un puerto de preselección por filtros que devuelve IDs internos elegibles; `reporting`/`job` no consulta sus tablas. Esta spec no persiste selección ni inicia procesamiento.
 
 ## Integraciones

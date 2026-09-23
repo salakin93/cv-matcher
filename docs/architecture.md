@@ -57,13 +57,13 @@ Cada módulo expone casos de uso y DTOs; controllers, repositorios y adaptadores
 | `administration` | usuarios, roles, parámetros, estado de integraciones y operaciones administrativas. |
 | `audit` | eventos inmutables y consulta exclusiva de administradores. |
 | `vacancy` | vacantes, requisitos, archivo/reactivación y configuración del reporte. |
-| `reporting` | versiones de reporte, ranking, estados humanos, filtros y exportaciones. |
-| `job` | cola durable, estados, claim, recuperación, reintentos y notificaciones de trabajo. |
+| `reporting` | scores deterministas, versiones de reporte, ranking, estados humanos, filtros y exportaciones. |
+| `job` | cola durable, estados, claim, recuperación, reintentos y emisión de eventos terminales de trabajo. |
 | `outlook` | OAuth server-side y adaptador Microsoft Graph. |
 | `document` | descarga, validación, antimalware, cifrado, extracción de texto, hash y ciclo de vida de archivos. |
 | `candidate` | perfil compartido, identidad/deduplicación, disponibilidad, correcciones y búsqueda histórica. |
-| `analysis` | contrato Claude, validación de respuesta, evidencia y cálculo determinista de score. |
-| `notification` | notificaciones in-app y correo; no contiene reglas de negocio del trabajo. |
+| `analysis` | contrato Claude, validación de respuesta y evidencia. |
+| `notification` | notificaciones in-app y correo; consume eventos terminales de `job` y no contiene reglas de negocio del trabajo. |
 | `shared` | errores, seguridad, serialización, reloj, identificadores y configuración transversal. |
 
 Los módulos se organizan por caso de uso, no por carpetas globales `controller/service/repository`. Cada módulo puede tener `api`, `application`, `domain` e `infrastructure` cuando aporte claridad.
@@ -97,7 +97,7 @@ Los módulos se organizan por caso de uso, no por carpetas globales `controller/
 
 ### 6.1 PostgreSQL y Flyway
 
-Entidades principales iniciales: `user_account`, `user_session`, `email_verification`, `password_reset`, `vacancy`, `vacancy_requirement`, `matching_job`, `matching_job_event`, `report_version`, `candidate_profile`, `candidate_document`, `report_candidate`, `requirement_assessment`, `notification` y `audit_event`.
+Entidades principales iniciales: `user_account`, `user_session`, `email_verification`, `password_reset`, `outbox_message`, `vacancy`, `vacancy_requirement`, `matching_job`, `matching_job_event`, `report_version`, `candidate_profile`, `candidate_document`, `report_candidate`, `requirement_assessment`, `notification` y `audit_event`.
 
 - Todas las tablas de negocio tienen UUID, timestamps UTC y versionado optimista cuando corresponda.
 - Flyway usa migraciones inmutables `V<number>__description.sql`; no se edita una migración aplicada.
@@ -107,7 +107,8 @@ Entidades principales iniciales: `user_account`, `user_session`, `email_verifica
 ### 6.2 Almacenamiento de CV
 
 - Ruta raíz configurable y privada, fuera de rutas estáticas y del directorio público del frontend.
-- Nombre físico opaco basado en UUID; nombre original sólo como metadato protegido.
+- Nombre físico opaco basado en UUID; el nombre original se usa sólo durante la
+  selección temporal de adjuntos y no se persiste.
 - Se guarda hash SHA-256, tamaño, MIME validado, estado de escaneo, referencia de cifrado y ruta relativa; nunca una ruta absoluta controlada por usuario.
 - PDF y DOCX se validan por tamaño, tipo real y parser seguro antes de extraer texto. ClamAV es obligatorio en producción; el servicio no analiza ni persiste como disponible un archivo no escaneado.
 - El texto extraído recibe los mismos controles de cifrado y acceso que el original.
@@ -119,7 +120,7 @@ Entidades principales iniciales: `user_account`, `user_session`, `email_verifica
 Estados mínimos: `QUEUED`, `DISCOVERING`, `INGESTING_DOCUMENTS`, `ANALYZING`, `COMPLETED`, `COMPLETED_WITH_WARNINGS`, `FAILED`, `REAUTHORIZATION_REQUIRED`, `CANCELLED`.
 
 - Crear o reintentar un reporte persiste el job en una transacción breve y lo despacha sólo después de commit.
-- Los correos originados por una mutación de negocio se registran en un outbox durable dentro de la misma transacción. Un despachador los entrega después de commit con reintentos acotados; un fallo de SMTP nunca revierte una cuenta, sesión, token o job ya confirmado.
+- Los correos originados por una mutación de negocio se registran en `outbox_message`, propiedad de `notification`, dentro de la misma transacción mediante su puerto. Un despachador los entrega después de commit con reintentos acotados; un fallo de SMTP nunca revierte una cuenta, sesión, token o job ya confirmado.
 - Un worker reclama un job mediante claim/lease transaccional en PostgreSQL. El lease vence y permite recuperación segura tras reinicio; dos instancias no procesan el mismo job.
 - Las llamadas Graph, ClamAV, extracción y Claude se realizan fuera de transacciones de base de datos. Persistencia de estados, contadores, checkpoint y resultado se hace en transacciones breves.
 - Checkpoints no contienen CV, texto, tokens ni PII innecesaria. Reintentos/replay no duplican mensajes, adjuntos, documentos, candidatos ni counters.
@@ -145,7 +146,7 @@ Estados mínimos: `QUEUED`, `DISCOVERING`, `INGESTING_DOCUMENTS`, `ANALYZING`, `
 
 - El backend es el único cliente de Anthropic. La clave se obtiene desde `ANTHROPIC_API_KEY` del entorno.
 - Modelo inicial configurable: `claude-sonnet-5`; cada reporte guarda el identificador exacto del modelo utilizado.
-- Se envía únicamente texto extraído necesario y requisitos de la vacante. No se incluyen tokens, secretos, rutas, headers, contenido del email ni metadatos no necesarios.
+- Se envía únicamente texto extraído necesario y requisitos de la vacante. Antes de enviarlo se eliminan identificadores detectables, como nombre, correo, teléfono, dirección y enlaces personales. No se incluyen tokens, secretos, rutas, headers, contenido del email ni metadatos no necesarios.
 - La respuesta debe ajustarse a un esquema JSON estricto por requisito. Se valida tamaño, campos, rangos 0–100, identificadores de requisito y evidencia antes de persistirla.
 - El texto del CV es contenido no confiable: no puede modificar instrucciones del sistema, ejecutar acciones, cambiar requisitos ni decidir contratación, score total o ranking.
 - Cada llamada Claude tiene timeout de 30 segundos. Errores transitorios o `429` se reintentan como maximo tres veces y un `Retry-After` no espera mas de 60 segundos por intento.

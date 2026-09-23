@@ -1,5 +1,9 @@
 # PRD - Papelera y Eliminacion por Privacidad
 
+## Estado
+
+APROBADO_PARA_SPECS. Revision de arquitectura completada.
+
 ## Objetivo
 
 Permitir retirar CVs de uso operativo, restaurarlos durante un período limitado
@@ -35,18 +39,19 @@ solicitud de privacidad.
   incluso si algún CV está en papelera.
 - La operación elimina esos datos inmediatamente; no espera la purga de 180
   días ni permite restauración.
-- La solicitud permanece en curso hasta completar la eliminacion. Solo informa
-  exito cuando todos los datos fueron eliminados; si falla, bloquea el acceso al
-  candidato y documentos y devuelve un error seguro.
+- Antes de responder, la solicitud bloquea acceso al candidato y documentos y
+  elimina archivo original y datos personales. Sólo después puede continuar de
+  forma durable la verificación, anonimización y limpieza de residuos no
+  accesibles.
 - Todas las apariciones de la persona en reportes históricos se anonimizan como
   `Candidato eliminado por privacidad`. Se eliminan de esas entradas correo,
   ubicación, disponibilidad, evidencias y cualquier referencia descargable al
   CV. Scores y estructura histórica del reporte se conservan.
 - La auditoría conserva solo que ocurrió una eliminación por privacidad, quién
   la ejecutó y cuándo, sin datos que permitan identificar a la persona.
-- Si la eliminación no puede terminar por completo, el sistema bloquea el
-  acceso al candidato y sus documentos, registra un fallo seguro y no declara
-  la operación como completada hasta finalizarla.
+- Si queda limpieza técnica pendiente, el sistema mantiene el acceso bloqueado,
+  registra un estado seguro y reintenta automáticamente hasta completarla. Nunca
+  reactiva datos eliminados ni declara éxito antes de borrar archivo y PII.
 
 ## Fuera de alcance
 

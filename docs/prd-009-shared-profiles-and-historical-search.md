@@ -1,5 +1,9 @@
 # PRD - Perfiles Compartidos y Busqueda Historica
 
+## Estado
+
+APROBADO_PARA_SPECS. Revision de arquitectura completada.
+
 ## Objetivo
 
 Permitir actualizar datos operativos compartidos de candidatos y buscar CVs ya
@@ -11,9 +15,10 @@ conservados cuando un reporte no alcanza el umbral de su vacante.
   `ADMIN` autorizados.
 - La disponibilidad inicia en `DESCONOCIDO` y puede cambiarse a `DISPONIBLE` o
   `NO_DISPONIBLE` por un usuario autorizado.
-- Solo se pueden corregir ubicación y habilidades extraídas. Nombre y correo no
-  se corrigen desde el perfil porque forman parte de la identidad extraída.
-- Cada corrección conserva el valor original, el valor corregido, el usuario y
+- Ubicación y habilidades inician vacías y sólo se registran mediante corrección
+  humana autorizada. Nombre y correo no se corrigen desde el perfil porque
+  forman parte de la identidad extraída.
+- Cada corrección conserva el valor anterior, el valor corregido, el usuario y
   la fecha y hora UTC. El valor corregido es el que usan el perfil y las
   búsquedas futuras.
 - Si dos usuarios guardan el mismo perfil a la vez, se conserva el primer
@@ -49,22 +54,23 @@ conservados cuando un reporte no alcanza el umbral de su vacante.
 - El usuario también puede indicar nombre o correo para limitar los perfiles
   históricos candidatos antes del análisis.
 - La busqueda considera solo CVs disponibles, no eliminados por privacidad y no
-  presentes en papelera. Analiza los CVs elegibles contra los requisitos de la
-  vacante actual mediante un trabajo asincrono.
-- Cada busqueda crea un job `HISTORICAL_SEARCH` propio, vinculado al reporte de
-  origen. Un job crea como maximo una version de reporte.
+  presentes en papelera. Analiza los CVs elegibles contra requisitos, pesos y
+  umbral del snapshot del reporte de origen mediante un trabajo asincrono.
+- Cada busqueda crea un job propio de tipo `HISTORICAL_SEARCH`, vinculado al
+  reporte de origen. Conserva los estados normales de job y crea como maximo una
+  version de reporte.
 - La busqueda analiza como maximo 500 CVs elegibles, priorizando los recibidos
   mas recientemente. Si existen mas, la nueva version indica una advertencia
   segura de alcance parcial.
 - Al finalizar, crea una nueva version inmutable combinada: conserva las
   entradas del reporte que la originó y añade las entradas históricas
   analizadas. El reporte original no cambia.
-- La nueva version deduplica personas con la misma regla del reporte: correo
-  extraído, luego correo remitente y finalmente nombre normalizado; para una
-  misma persona usa el CV más reciente disponible.
-- Si no hay CVs históricos elegibles o ninguno supera el puntaje mínimo, no se
-  crea una nueva versión y el usuario recibe un resultado seguro sin datos de
-  terceros.
+- La nueva version deduplica personas por correo extraído y, si falta, correo
+  remitente; no fusiona por nombre. Para una misma persona usa el CV más reciente
+  disponible.
+- Si no hay CVs históricos elegibles o ninguno supera el puntaje mínimo, el job
+  termina `COMPLETED_WITH_WARNINGS` con `NO_HISTORICAL_CANDIDATES`; no se crea
+  una nueva versión y el usuario recibe un resultado seguro sin datos de terceros.
 - El trabajo respeta la regla de un solo job activo por vacante. Un fallo no
   cambia el reporte que inició la búsqueda.
 

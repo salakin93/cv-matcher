@@ -56,7 +56,7 @@ Unitarias tabulares de formula, bordes/precision e invariantes; integracion de p
 Depende de evaluaciones completas de 009. La version del algoritmo debe conservarse al evolucionar reglas futuras.
 
 ## Decisiones / preguntas abiertas
-- ARCHITECTURAL DECISION: score es regla determinista del modulo `analysis`, no una respuesta de proveedor.
+- ARCHITECTURAL DECISION: score es regla determinista del modulo `reporting`, que consume evaluaciones validadas de `analysis`; no es una respuesta de proveedor.
 
 ## Definition of Ready
 `READY_FOR_DEV`.

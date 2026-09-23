@@ -2,9 +2,9 @@
 
 ## Estado
 
-Borrador funcional para el punto 6: Revisión Humana, Documentos y
-Exportaciones. Define únicamente el estado humano; descarga, filtros,
-exportaciones, auditoría de esos accesos y perfiles se especifican por separado.
+APROBADO_PARA_SPECS. Revision de arquitectura completada. Define unicamente el
+estado humano; descarga, filtros, exportaciones, auditoria de esos accesos y
+perfiles se especifican por separado.
 
 ## Objetivo
 
@@ -42,6 +42,8 @@ estado. Todos los reclutadores autorizados ven el estado compartido.
 | BR-006-05 | Cambiar el estado no modifica el score, ranking, evidencias, análisis, disponibilidad, perfil ni CV. |
 | BR-006-06 | El estado no se propaga a otras vacantes, otros reportes ni versiones históricas. |
 | BR-006-07 | Cada cambio efectivo queda auditado para consulta exclusiva de administradores. |
+| BR-006-08 | El estado sólo se modifica en versiones de reporte `COMPLETED` o `COMPLETED_WITH_WARNINGS`. |
+| BR-006-09 | Guardar el mismo estado no es un cambio efectivo: no modifica fecha, versión ni auditoría. |
 
 ## Fuera de alcance
 

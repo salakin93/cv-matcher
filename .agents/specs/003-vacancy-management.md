@@ -16,13 +16,13 @@ Permitir gestionar vacantes compartidas con requisitos y rango de recepcion inmu
 - Crear o procesar jobs (004+), reportes, notificaciones y UI.
 
 ## Comportamiento y reglas
-- `RECRUITER` y `ADMIN` activos operan datos compartidos. Titulo, descripcion, rango y 1--30 requisitos son obligatorios; peso entero 1--5, obligatorio/opcional y orden preservado.
+- `RECRUITER` y `ADMIN` activos operan datos compartidos. Titulo, descripcion, rango y 1--30 requisitos son obligatorios; peso entero 1--5, obligatorio/opcional y orden preservado. Requisitos repetidos o parecidos son validos si representan criterios diferentes.
 - El rango de fechas cubre dias completos `America/La_Paz`, se persiste UTC y requiere inicio no posterior a fin.
 - Solo `ACTIVE` se reemplaza completamente. Version optimista conserva primer cambio; segundo recibe conflicto y recarga.
 - Titulo normalizado duplicado entre activas es advertencia, no bloqueo. Archivar/reactivar repetido no cambia datos ni audita.
 
 ## Contratos API
-- `POST /api/v1/vacancies`, `GET /api/v1/vacancies`, `GET/PUT /api/v1/vacancies/{id}`, `POST .../archive|reactivate`.
+- `POST /api/v1/vacancies`, `GET /api/v1/vacancies`, `GET/PUT /api/v1/vacancies/{id}`, `POST /api/v1/vacancies/{id}/archive`, `POST /api/v1/vacancies/{id}/reactivate`.
 - DTO incluye rango en fecha local y version; respuestas exponen advertencia `DUPLICATE_ACTIVE_TITLE` sin impedir `201`/`200`.
 - Validacion retorna `422`; estado/version incompatible `409`; inexistente `404` seguro.
 
@@ -36,7 +36,7 @@ Flyway agrega `vacancy` y `vacancy_requirement`, UUID, instantes UTC, version y 
 No integra proveedores ni inicia jobs.
 
 ## Errores y estados
-`ARCHIVED` conserva historial y rechaza edicion. Este incremento no cancela ni interpreta jobs, aunque su API futura debe tolerar que archivar coincida con uno activo.
+`ARCHIVED` conserva historial y rechaza edicion. Archivar no cancela un job activo; reactivar tampoco modifica su snapshot. La restriccion de crear un job mientras la vacante esta archivada o ya tiene uno activo pertenece a 004.
 
 ## Seguridad y privacidad
 Requiere bearer valido y rol permitido. No incluye CV/PII; auditoria no almacena contenido libre de descripcion/requisito.

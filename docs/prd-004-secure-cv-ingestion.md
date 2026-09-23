@@ -2,8 +2,8 @@
 
 ## Estado
 
-Borrador funcional consolidado con decisiones de producto aprobadas en la
-sesion de refinamiento. Este documento define comportamiento de producto; no
+APROBADO_PARA_SPECS. Revision de arquitectura completada. Este documento define
+comportamiento de producto; no define arquitectura ni implementacion tecnica.
 
 ## Objetivo
 
@@ -34,7 +34,8 @@ Un adjunto solo se intenta procesar si cumple todas estas condiciones:
 ### Filtro de nombre
 
 El nombre se usa solo de forma temporal para decidir si vale la pena descargar
-el adjunto. Se acepta si contiene, sin distinguir mayusculas ni acentos:
+el adjunto. `cv` coincide como cualquier subcadena. Las demas expresiones
+coinciden sin distinguir mayusculas ni acentos:
 
 - `cv`
 - `hoja de vida`
@@ -61,10 +62,11 @@ El nombre nunca se persiste, expone, registra en logs ni aparece en auditoria.
 
 ### Por mensaje
 
-- Se revisan como maximo dos adjuntos por mensaje.
-- Si tiene mas de dos, el job registra la advertencia
+- El sistema consulta metadatos minimos de todos los adjuntos y selecciona como
+  maximo dos candidatos cuyo nombre cumpla el filtro.
+- Si existen mas de dos candidatos por nombre, el job registra la advertencia
   `MESSAGE_ATTACHMENT_LIMIT_REACHED`.
-- No guarda ni expone nombres de adjuntos omitidos.
+- No descarga, guarda ni expone nombres de candidatos omitidos.
 
 ### Por archivo
 
@@ -87,7 +89,7 @@ El nombre nunca se persiste, expone, registra en logs ni aparece en auditoria.
 
 ### Malware detectado
 
-- Se cuarენტena.
+- Se cuarentena.
 - No queda disponible para extraccion, descarga ni ranking.
 - Se cuenta como documento cuarentenado con `MALWARE_DETECTED`.
 - El job continua con otros adjuntos.

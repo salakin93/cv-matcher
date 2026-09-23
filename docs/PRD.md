@@ -34,14 +34,14 @@ Una vacante tiene título, descripción, rango `from`/`to` y uno o más requisit
 - Las vacantes pueden archivarse y reactivarse. Una vacante archivada conserva su historial pero no permite nuevos reportes.
 - Se permite un reporte activo por vacante. Las solicitudes se encolan y la concurrencia global es configurable.
 - El trabajo es asíncrono. Se puede consultar su estado y el solicitante recibe una notificación dentro de la aplicación y por correo cuando finaliza, con o sin advertencias, o falla.
-- Si hay fallas parciales, se entrega el reporte con advertencias y razones seguras. Si no hay CV válido analizable, o no puede operar Outlook o la IA, el trabajo falla.
+- Si no hay CV válido disponible después de ingesta, o no puede operar Outlook, el trabajo falla. Fallas parciales posteriores de extracción, IA o identidad conservan resultados válidos con advertencias seguras. Si no queda candidato rankeable, el trabajo termina con advertencias y sin reporte vacío.
 
 ## 5. Obtención y gestión de CVs
 
 - La fuente inicial es una única cuenta Outlook de la organización; se consulta exclusivamente la carpeta Inbox y el rango indicado.
 - Se aceptan PDF y DOCX. Se pueden procesar CVs escritos en español o inglés.
 - Si un correo contiene una carta de presentación y un CV, se identifica el CV y se informa el documento ignorado. Si contiene varios CVs, cada uno es inicialmente un candidato separado.
-- Para duplicados de la misma persona dentro de un reporte se presenta una sola entrada, usando el CV más reciente. Identidad: correo extraído del CV, luego correo remitente, luego nombre normalizado con menor confianza.
+- Para duplicados de la misma persona dentro de un reporte se presenta una sola entrada, usando el CV más reciente. Identidad: correo extraído del CV y, si falta, correo remitente. El nombre sirve sólo para presentación y no fusiona candidatos automáticamente; sin identidad resoluble, cada CV aparece como candidato anónimo independiente.
 - Un CV puede aparecer en reportes de varias vacantes. Cada vacante analiza todos los CVs de su rango.
 - PDFs corruptos, protegidos con contraseña, sin texto útil, u otros documentos que no sean CV se excluyen del ranking e informan una razón segura.
 - El CV original se guarda en almacenamiento local privado; la base de datos conserva su referencia y metadatos.
@@ -64,8 +64,8 @@ totalScore = mínimo entre 100 y mandatoryScore + optionalBonus
 
 - El peso se usa tanto en requisitos obligatorios como opcionales.
 - Si no existe evidencia de un requisito obligatorio, recibe 0 pero el candidato continúa en el ranking. `NO_DEMOSTRADO` se distingue de `NO_CUMPLE`.
-- El umbral predeterminado sugerido para una vacante es 70 y puede cambiarse antes de generar el reporte.
-- Los empates se resuelven por mayor `mandatoryScore`, luego mayor número de requisitos obligatorios cumplidos y finalmente CV más reciente.
+- El umbral predeterminado sugerido es 70 y puede cambiarse al crear cada job de reporte; queda inmutable en ese reporte.
+- El ranking ordena primero por `totalScore`; los empates se resuelven por mayor `mandatoryScore`, luego mayor número de requisitos obligatorios cumplidos, CV más reciente e identificador interno estable.
 - Claude no puede contratar, descartar, cambiar pesos, calcular el puntaje final ni ordenar candidatos.
 - El modelo inicial es `claude-sonnet-5`. El administrador puede escoger un modelo para análisis futuros; el cambio no altera reportes existentes.
 
@@ -82,7 +82,7 @@ El reporte muestra resumen, ranking completo, Top 5, puntajes obligatorio/opcion
 
 Cuando no existan candidatos que alcancen el umbral de la vacante, el sistema ofrece una búsqueda histórica sólo tras confirmación del reclutador.
 
-- El reclutador define filtros: período de recepción, disponibilidad, habilidades/términos extraídos, ubicación cuando exista y puntaje mínimo respecto de la vacante actual.
+- El reclutador define filtros: período de recepción, disponibilidad, habilidades/términos extraídos, ubicación cuando exista y puntaje mínimo respecto del snapshot del reporte de origen.
 - El sistema sugiere 70 como puntaje mínimo, modificable por el reclutador.
 - Todos los reclutadores pueden actualizar disponibilidad (`DISPONIBLE`, `NO_DISPONIBLE`, `DESCONOCIDO`) y corregir ubicación y habilidades extraídas del perfil. Se conserva el valor original, el cambio, usuario y fecha.
 - La corrección se aplica al perfil compartido y a búsquedas futuras; los reportes históricos no cambian.

@@ -19,6 +19,7 @@ Administrar una unica conexion Outlook organizacional con OAuth seguro para que 
 - Solo existe una autorizacion pendiente; un inicio nuevo reemplaza el intento previo. Reautorizacion fallida/cancelada conserva una conexion previa util.
 - OAuth Authorization Code + PKCE con callback backend confidencial solicita `openid`, `profile`, `offline_access` y `Mail.Read`. Valida `state`, nonce y `id_token` por discovery/JWKS; no expone valores OAuth al navegador.
 - Revocacion/token invalido pasa a `REAUTHORIZATION_REQUIRED`; fallo tecnico no recuperable a `ERROR`.
+- Un `RECRUITER` no puede consultar estado tecnico ni iniciar autorizacion. Los jobs consumen operaciones del modulo `outlook`; no reciben ni descifran tokens o secretos.
 
 ## Contratos API
 - `GET /api/v1/admin/outlook-connection` devuelve estado, fechas y codigo seguro exclusivamente a `ADMIN`.

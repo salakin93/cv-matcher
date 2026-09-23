@@ -1,7 +1,7 @@
 # 018 - Historical search job and combined version
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 009; depends on 004, 009–012, 016 and 017.
+`READY_FOR_DEV` — backend only; PRD 009; depends on 004, 009–012, 016 and 017.
 
 ## Objetivo
 Ejecutar una confirmación histórica como job durable `HISTORICAL_SEARCH` y, sólo con resultados que alcanzan el mínimo, publicar una versión combinada e inmutable con linaje.
@@ -20,11 +20,11 @@ Ejecutar una confirmación histórica como job durable `HISTORICAL_SEARCH` y, s�
 - `POST` consume una confirmación `CONFIRMED` una vez y crea `matching_job` de tipo `HISTORICAL_SEARCH`; respeta un único job activo por vacante junto a jobs regulares.
 - Al iniciar, revalidar elegibilidad y seleccionar por recepción descendente los primeros 500 CVs elegibles; si hay más, añadir advertencia segura. Usar snapshot de requisitos/umbral/filtros de confirmación.
 - Analizar con pipeline 009–010. Retener sólo históricos con `totalScore >= mínimo confirmado`. Si ninguno, terminar con advertencia segura y no crear versión.
-- Si hay resultados, combinar entradas origen e históricas, deduplicar por correo CV, luego sender, luego nombre normalizado, conservando el CV disponible más reciente; recalcular ranking determinista y publicar una única versión con `predecessor_report_version_id=origen`. Origen nunca cambia.
+- Si hay resultados, combinar entradas origen e históricas, deduplicar sólo por correo CV y luego correo remitente protegido, conservando el CV disponible más reciente. Sin correo, cada documento permanece anónimo independiente. Recalcular ranking determinista y publicar una única versión con `predecessor_report_version_id=origen`. Origen nunca cambia.
 
 ## Contratos
 - `POST /api/v1/historical-search-confirmations/{confirmationId}/jobs` responde `202 { jobId, statusUrl, sourceReportVersionId }`; `409 CONFIRMATION_ALREADY_CONSUMED|VACANCY_JOB_ACTIVE|HISTORICAL_SEARCH_NOT_ELIGIBLE`.
-- Reutilizar `GET /report-jobs/{id}` y extender DTO con `jobType`, `sourceReportVersionId`, `resultReportVersionId?`; no exponer selección/documentos.
+- Reutilizar `GET /api/v1/report-jobs/{id}` y extender DTO con `jobType`, `sourceReportVersionId`, `resultReportVersionId?`; no exponer selección/documentos.
 - Nueva versión expone `predecessorReportVersionId` y `versionKind: HISTORICAL_COMBINED`; `GET` del origen conserva `versionKind: INITIAL`.
 
 ## Configuración centralizada

@@ -1,7 +1,7 @@
-# 011 - Identidad y selección de candidato
+# 011 - Identidad por correo y selección de candidato
 
 ## Objetivo
-Agrupar documentos evaluados por persona para un job y seleccionar exactamente el CV mas reciente por identidad, preservando candidatos anonimos independientes.
+Agrupar documentos evaluados por correo para un job y seleccionar exactamente el CV mas reciente por identidad, preservando candidatos anonimos independientes.
 
 ## Referencias
 - `docs/prd-005-extraction-ai-scoring-ranking.md`, seccion 2.
@@ -11,53 +11,53 @@ Agrupar documentos evaluados por persona para un job y seleccionar exactamente e
 
 ## Alcance
 ### Incluido
-- Extraccion interna de email/nombre de texto, normalizacion, precedencia de identidad, deduplicacion por job y seleccion estable de CV.
+- Extraccion interna de correo de texto, normalizacion, precedencia de identidad, deduplicacion por job y seleccion estable de CV.
 ### Excluido
 - Correccion/fusion manual de perfiles, directorio/busqueda historica, UI, report ranking y descarga.
 
 ## Comportamiento y reglas
-- Precedencia obligatoria: email valido extraido del CV; si falta, sender protegido del mensaje; si falta, nombre extraido normalizado. Correo coincide sin caso; nombre normalizado es menor confianza pero deduplica cuando no existe correo valido.
-- Mismos valores de la clave aplicable identifican persona; elegir CV de fecha de recepcion mas reciente, y ante empate ID interno estable. Un CV sin email, sender ni nombre util es `Candidato anonimo`; cada anonimo es una entrada separada.
-- Nombre/correo se conservan cifrados y fuentes internas no se muestran. Esta seleccion no altera documentos, sus scores ni snapshots.
+- Precedencia obligatoria: correo valido extraido del CV; si falta, correo remitente protegido del mensaje. Los correos coinciden sin caso.
+- Mismos valores de la clave aplicable identifican persona; elegir CV de fecha de recepcion mas reciente, y ante empate ID interno estable. Todo CV sin correo de CV ni remitente es `Candidato anonimo`, incluso si contiene un nombre util; cada anonimo es una entrada separada.
+- El correo se conserva cifrado y las fuentes internas no se muestran. No deduplicar por nombre, similitud ni otra inferencia. Esta seleccion no altera documentos, sus scores ni snapshots.
 
 ## Contratos API
-No agrega endpoint publico. Contrato interno a 012 entrega ID candidato opaco, identidad permitida, confianza, documento/score elegido y desempate estable; sender y fuente no salen del modulo.
+No agrega endpoint publico. Contrato interno a 012 entrega ID candidato opaco, correo autorizado o marcador anonimo, documento/score elegido y desempate estable; remitente y fuente no salen del modulo.
 
 ## Configuracion centralizada
-Normalizacion de email/nombre es un unico componente del modulo `candidate`; su algoritmo no se replica en controller, frontend ni reportes. No agrega secretos/configuracion externa.
+Normalizacion de correo es un unico componente del modulo `candidate`; su algoritmo no se replica en controller, frontend ni reportes. No agrega secretos/configuracion externa.
 
 ## Datos y persistencia
-Flyway agrega `candidate_profile` y relacion de identidad/documento segun limites de modulo, con valores cifrados e indice/clave protegida para igualdad. La unicidad de seleccion es por job e identidad; no usar hash expuesto como API.
+Flyway agrega `candidate_profile` y relacion de identidad/documento segun limites de modulo, con correo cifrado e indice/clave protegida para igualdad. La unicidad de seleccion es por job e identidad de correo; no usar hash expuesto como API.
 
 ## Integraciones
-No llama proveedores. Consume sender protegido descubierto por 006 y texto protegido de 008 dentro de casos de uso autorizados.
+No llama proveedores directamente. Consume correo remitente protegido obtenido solo para un CV disponible en esta etapa posterior a discovery, y texto protegido de 008 dentro de casos de uso autorizados.
 
 ## Errores y estados
-Fallo de extraer identidad no descarta documento evaluado: crea anonimo. Datos identitarios invalidos se tratan como ausentes; no se inventan ni se unen por similitud no aprobada.
+Fallo de extraer correo no descarta documento evaluado: crea anonimo. Correos invalidos se tratan como ausentes; no se inventan ni se unen por nombre o similitud.
 
 ## Seguridad y privacidad
-Sender nunca se muestra ni se envia a Claude. Cifrado, acceso por modulo y minimizacion conforme arquitectura; no logs con email/nombre normalizado ni fuente de identidad.
+El remitente nunca se muestra ni se envia a Claude. Cifrado, acceso por modulo y minimizacion conforme arquitectura; no logs con correo normalizado ni fuente de identidad.
 
 ## Observabilidad
-Metricas agregadas de claves CV/sender/nombre/anonimo y deduplicados, sin valores; diagnosticos solo IDs opacos.
+Metricas agregadas de claves de correo CV/remitente/anonimo y deduplicados, sin valores; diagnosticos solo IDs opacos.
 
 ## Estrategia de pruebas
 ### Validacion manual
-Con documentos sintéticos, comprobar precedencia CV email > sender > nombre, coincidencias normalizadas, fechas/ID empate y anonimos independientes.
+Con documentos sintéticos, comprobar precedencia correo CV > remitente, coincidencias normalizadas, fechas/ID empate y anonimos independientes aunque tengan nombre.
 ### Automatizacion diferida
-Unitarias de normalizacion/precedencia, integracion de cifrado/indice de igualdad y regresion de deduplicacion por job.
+Unitarias de normalizacion/precedencia, integracion de cifrado/indice de igualdad y regresion de deduplicacion por correo y anonimos por documento.
 
 ## Criterios de aceptacion
 1. Dos CVs con mismo email CV producen una persona y se elige el mas reciente.
-2. Sender se usa solo sin email CV; nombre normalizado solo sin ambos.
-3. Dos CVs sin correos con mismo nombre normalizado se deduplican.
+2. Remitente se usa solo sin correo CV; no existe deduplicacion por nombre.
+3. Dos CVs sin correos, aunque tengan el mismo nombre, permanecen como anonimos independientes.
 4. Anonimos permanecen separados y fuentes internas no se exponen.
 
 ## Riesgos y dependencias
-Depende de 006, 008 y 010. Deduplicar por nombre puede unir homonimos; es la regla de menor confianza aprobada, no una inferencia adicional.
+Depende de 006, 008 y 010. No deduplicar candidatos anonimos puede mostrar varias entradas de una misma persona; es la regla de privacidad y determinismo aprobada.
 
 ## Decisiones / preguntas abiertas
-- ARCHITECTURAL DECISION: precedencia CV email, sender protegido, nombre normalizado es la unica deduplicacion v1; no hay matching difuso.
+- PRODUCT DECISION: la deduplicacion v1 usa solo correo del CV o, como fallback, correo remitente protegido. Todo documento sin correo es anonimo independiente; no hay matching por nombre ni difuso.
 
 ## Definition of Ready
 `READY_FOR_DEV`.

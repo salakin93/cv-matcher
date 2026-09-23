@@ -1,7 +1,7 @@
 # 021 - Blocking privacy deletion
 
 ## Estado
-`DRAFT_FOR_APPROVAL` — backend only; PRD 010; depends on 014, 016, 018, 019 and 020.
+`READY_FOR_DEV` — backend only; PRD 010; depends on 014, 016, 018, 019 and 020.
 
 ## Objetivo
 Permitir a ADMIN eliminar inmediatamente todos los datos personales asociados a una selección exacta y anonimizar sus apariciones históricas, bloqueando acceso hasta completar.

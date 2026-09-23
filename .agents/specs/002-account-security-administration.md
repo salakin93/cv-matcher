@@ -20,8 +20,8 @@ Completar recuperacion y cambios de cuenta, y permitir a `ADMIN` administrar rol
 ## Comportamiento y reglas
 - Recuperacion es neutral, maximo tres solicitudes/hora, token unico de 30 min; completarla cambia password, desbloquea y revoca todas las sesiones. Cuenta pendiente recibe reenvio de verificacion, no reset.
 - Cambio voluntario exige sesion, password actual y password valida; revoca todas las sesiones. Cambio obligatorio conserva las restricciones de 001.
-- Cambio de correo exige password actual; mantiene el correo vigente hasta verificar el nuevo token de 24 h. Verificar reemplaza correo y revoca sesiones.
-- Solo `ADMIN` activo lista y cambia rol/estado ajenos. No cambia su propio rol/estado ni degrada/desactiva al ultimo `ADMIN` activo. Cambios efectivos revocan sesiones y notifican.
+- Cambio de correo exige password actual; mantiene el correo vigente hasta verificar el nuevo token de 24 h. El correo nuevo debe ser unico; si pertenece a otra cuenta se rechaza con mensaje seguro. Admite tres reenvios por hora, cada uno invalida el anterior. Verificar reemplaza correo, revoca sesiones y no crea sesion.
+- Solo `ADMIN` activo lista y cambia rol/estado ajenos. No cambia su propio rol/estado ni degrada/desactiva al ultimo `ADMIN` activo. Cambios efectivos revocan sesiones y notifican por correo seguro a la cuenta afectada.
 
 ## Contratos API
 - `POST /api/v1/auth/password-reset/request|confirm`, `/password/change`, `/email-change/request|verify|resend`.
@@ -32,13 +32,13 @@ Completar recuperacion y cambios de cuenta, y permitir a `ADMIN` administrar rol
 Extender `IdentityProperties` de 001 con ventana de reset, cambio de correo y rate limits. Usar el `MailGateway` y outbox centrales de arquitectura; no hay configuracion administrable por API.
 
 ## Datos y persistencia
-Flyway agrega `password_reset` y almacenamiento de cambio de correo/tokens con hash, expiracion, consumo atomico y versionado de cuenta. Reutiliza sesiones/auditoria/outbox de 001; no modifica migraciones aplicadas.
+Flyway agrega `password_reset` y almacenamiento de cambio de correo/tokens con hash, expiracion, consumo atomico y versionado de cuenta. Reutiliza sesiones/auditoria/outbox de 001; no modifica migraciones aplicadas. Los eventos efectivos incluyen reset completado, cambio de password/correo, rol, activacion y desactivacion.
 
 ## Integraciones
 Solo correo de producto mediante outbox. Un fallo de entrega no revierte cambio de seguridad o privilegio confirmado.
 
 ## Errores y estados
-Token usado, vencido o reemplazado no cambia datos. Peticiones administrativas repetidas sin cambio no auditan. El ultimo `ADMIN` activo recibe `409` seguro al intentar una transicion prohibida.
+Token usado, vencido o reemplazado no cambia datos. Reset o cambio de password no crean sesion y el reset desbloquea la cuenta. Peticiones administrativas repetidas sin cambio no auditan. El ultimo `ADMIN` activo recibe `409` seguro al intentar una transicion prohibida.
 
 ## Seguridad y privacidad
 No almacenar ni revelar passwords, tokens, enlaces, IP o user-agent. Aplicar autorizacion por rol y recurso en backend; invalidar sesiones en toda transicion exigida por PRD.
@@ -57,7 +57,7 @@ Pruebas de transacciones/competencia del ultimo admin y tokens, integracion Post
 2. El correo nuevo no sustituye al vigente antes de verificarse.
 3. Cambiar password, correo, rol o activo revoca las sesiones afectadas.
 4. Un `ADMIN` no administra su propia cuenta ni deja el sistema sin `ADMIN` activo.
-5. Avisos y auditoria no contienen secretos ni contenido personal innecesario.
+5. Avisos y auditoria no contienen secretos ni contenido personal innecesario; la auditoria no guarda IP, user-agent ni credenciales.
 
 ## Riesgos y dependencias
 Depende de 001 y SMTP/outbox. Las mutaciones de cuenta requieren control de concurrencia para preservar el ultimo administrador.
