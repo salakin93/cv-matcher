@@ -100,7 +100,7 @@ Los módulos se organizan por caso de uso, no por carpetas globales `controller/
 Entidades principales iniciales: `user_account`, `user_session`, `email_verification`, `password_reset`, `outbox_message`, `vacancy`, `vacancy_requirement`, `matching_job`, `matching_job_event`, `report_version`, `candidate_profile`, `candidate_document`, `report_candidate`, `requirement_assessment`, `notification` y `audit_event`.
 
 - Todas las tablas de negocio tienen UUID, timestamps UTC y versionado optimista cuando corresponda.
-- Flyway usa migraciones inmutables `V<number>__description.sql`; no se edita una migración aplicada.
+- Por decisión aprobada de reinicio antes de crear entornos compartidos, el historial anterior se reemplaza por `V1__identity_baseline.sql`, limitado a BE-001/BE-002. Desde este baseline, Flyway usa migraciones inmutables `V<number>__description.sql`; no se edita una migración aplicada.
 - Índices y constraints se definen junto con cada invariante: unicidad de correo normalizado, una ejecución activa por vacante, idempotencia de mensajes/adjuntos Graph y hashes de documento.
 - Las eliminaciones de CV son lógicas hasta su purga; la eliminación por privacidad elimina datos personales y archivos de forma inmediata, dejando sólo auditoría mínima no identificable.
 

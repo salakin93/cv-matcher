@@ -4,6 +4,8 @@ import com.cvmatcher.cv_matcher_backend.identity.application.PasswordPolicyExcep
 import com.cvmatcher.cv_matcher_backend.identity.application.AccountAccessException;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
@@ -20,6 +22,8 @@ import java.util.UUID;
 
 @RestControllerAdvice
 class ApiExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(PasswordPolicyException.class)
     ResponseEntity<ApiError> handlePasswordPolicy(HttpServletRequest request) {
         return error(
@@ -69,8 +73,21 @@ class ApiExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    ResponseEntity<ApiError> handleUnexpected(HttpServletRequest request) {
+    ResponseEntity<ApiError> handleUnexpected(Exception exception, HttpServletRequest request) {
+        var correlationId = correlationId(request);
+        log.error(
+                "identity_request_failed path={} correlationId={} exceptionType={}",
+                request.getRequestURI(),
+                correlationId,
+                rootCauseType(exception)
+        );
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Ocurrió un error inesperado.", request);
+    }
+
+    private String rootCauseType(Exception exception) {
+        Throwable cause = exception;
+        while (cause.getCause() != null) cause = cause.getCause();
+        return cause.getClass().getSimpleName();
     }
 
     private ResponseEntity<ApiError> error(HttpStatus status, String code, String message, HttpServletRequest request) {
