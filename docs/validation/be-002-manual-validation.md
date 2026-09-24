@@ -1,6 +1,6 @@
 # Validacion manual BE-001 y BE-002
 
-**Fecha:** 2026-09-24  
+**Fecha:** 2026-09-24
 **Entorno:** backend local Java 25, PostgreSQL 17 local y base recreada desde `V1__identity_baseline.sql`.
 
 ## Resultado
