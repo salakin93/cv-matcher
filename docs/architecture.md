@@ -101,6 +101,7 @@ Entidades principales iniciales: `user_account`, `user_session`, `email_verifica
 
 - Todas las tablas de negocio tienen UUID, timestamps UTC y versionado optimista cuando corresponda.
 - Por decisión aprobada de reinicio antes de crear entornos compartidos, el historial anterior se reemplaza por `V1__identity_baseline.sql`, limitado a BE-001/BE-002. Desde este baseline, Flyway usa migraciones inmutables `V<number>__description.sql`; no se edita una migración aplicada.
+- El historial de despliegue actual es completo y obligatorio: `V1` crea cuentas `RECRUITER`, `V2` amplía el constraint para `ADMIN` junto con vacantes y `V3` agrega el bootstrap y seguridad de cuentas. No se aplican incrementos de forma selectiva ni se reescriben migraciones ya aplicadas.
 - Índices y constraints se definen junto con cada invariante: unicidad de correo normalizado, una ejecución activa por vacante, idempotencia de mensajes/adjuntos Graph y hashes de documento.
 - Las eliminaciones de CV son lógicas hasta su purga; la eliminación por privacidad elimina datos personales y archivos de forma inmediata, dejando sólo auditoría mínima no identificable.
 

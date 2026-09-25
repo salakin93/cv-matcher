@@ -3,6 +3,8 @@ package com.cvmatcher.cv_matcher_backend.identity.api;
 import com.cvmatcher.cv_matcher_backend.identity.application.PasswordPolicyException;
 import com.cvmatcher.cv_matcher_backend.identity.application.AccountAccessException;
 import com.cvmatcher.cv_matcher_backend.identity.insfrastructure.observability.CorrelationIdFilter;
+import com.cvmatcher.cv_matcher_backend.vacancy.application.VacancyConflictException;
+import com.cvmatcher.cv_matcher_backend.vacancy.application.VacancyNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,6 +67,16 @@ class ApiExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     ResponseEntity<ApiError> handleConflict(HttpServletRequest request) {
         return error(HttpStatus.CONFLICT, "CONFLICT", "La operación no puede completarse.", request);
+    }
+
+    @ExceptionHandler(VacancyNotFoundException.class)
+    ResponseEntity<ApiError> handleVacancyNotFound(HttpServletRequest request) {
+        return error(HttpStatus.NOT_FOUND, "VACANCY_NOT_FOUND", "La vacante no existe.", request);
+    }
+
+    @ExceptionHandler(VacancyConflictException.class)
+    ResponseEntity<ApiError> handleVacancyConflict(HttpServletRequest request) {
+        return error(HttpStatus.CONFLICT, "VACANCY_CONFLICT", "La vacante cambió o no permite esta operación. Recárguela e intente nuevamente.", request);
     }
 
     @ExceptionHandler(DuplicateKeyException.class)

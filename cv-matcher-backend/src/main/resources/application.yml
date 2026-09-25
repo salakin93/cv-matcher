@@ -14,6 +14,11 @@ spring:
 server:
   port: ${SERVER_PORT:6060}
 
+logging:
+  structured:
+    format:
+      console: logstash
+
 springdoc:
   api-docs:
     path: /v3/api-docs
@@ -33,3 +38,11 @@ app:
     outbox-encryption-key-version: ${IDENTITY_OUTBOX_ENCRYPTION_KEY_VERSION:1}
     login-max-failed-attempts: ${LOGIN_MAX_FAILED_ATTEMPTS:5}
     login-lock-minutes: ${LOGIN_LOCK_MINUTES:15}
+    password-reset-minutes: ${PASSWORD_RESET_MINUTES:30}
+    password-reset-request-limit: ${PASSWORD_RESET_REQUEST_LIMIT:3}
+    password-reset-request-window-seconds: ${PASSWORD_RESET_REQUEST_WINDOW_SECONDS:3600}
+    email-change-hours: ${EMAIL_CHANGE_HOURS:24}
+    email-change-resend-limit: ${EMAIL_CHANGE_RESEND_LIMIT:3}
+    email-change-resend-window-seconds: ${EMAIL_CHANGE_RESEND_WINDOW_SECONDS:3600}
+    initial-admin-email: ${INITIAL_ADMIN_EMAIL:}
+    initial-admin-password: ${INITIAL_ADMIN_PASSWORD:}

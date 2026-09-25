@@ -11,6 +11,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -23,6 +24,7 @@ import java.util.UUID;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfiguration {
     @Bean
     CookieCsrfTokenRepository csrfTokenRepository(SecurityProperties properties) {
@@ -54,11 +56,17 @@ public class SecurityConfiguration {
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/verify-email",
                                 "/api/v1/auth/resend-verification",
+                                "/api/v1/auth/password-reset/request",
+                                "/api/v1/auth/password-reset/confirm",
+                                "/api/v1/auth/email-change/verify",
                                 "/actuator/health/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**"
-                        ).permitAll().anyRequest().authenticated())
+                        ).permitAll()
+                        .requestMatchers("/api/v1/auth/password/change").hasAnyRole("RECRUITER", "ADMIN", "PASSWORD_CHANGE_REQUIRED")
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .anyRequest().hasAnyRole("RECRUITER", "ADMIN"))
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, exception) ->
                                 write(mapper, request, response, 401, "UNAUTHENTICATED", "No autenticado"))

@@ -8,9 +8,10 @@ crear, editar ni renumerar migraciones.
 
 ## Reglas de secuencia
 
-- Flyway conserva el historial aplicado. Toda tabla, constraint o indice futuro
-  se agrega en una nueva migracion con el siguiente numero disponible al
-  implementar su spec; nunca se edita una migracion existente.
+- Por la decision aprobada de reinicio antes de crear entornos compartidos, el
+  historial anterior fue reemplazado por `V1__identity_baseline.sql`. Desde ese
+  baseline, toda tabla, constraint o indice futuro se agrega en una nueva
+  migracion; nunca se edita una migracion aplicada.
 - Un modulo accede a datos de otro modulo mediante puerto de aplicacion, nunca
   mediante repositorio o SQL directo.
 - `matching_job` es la fuente durable de estados, claims y checkpoints. Los
@@ -23,29 +24,18 @@ crear, editar ni renumerar migraciones.
 
 | Version | Spec principal | Datos e invariantes actuales |
 | --- | --- | --- |
-| V1 | 001-002 | `user_account`, `user_session`, `account_action_token`, `audit_event`; correo normalizado unico y tokens hasheados de un uso. |
-| V2 | 001 | `verification_resend_attempt` e indice por usuario/fecha. |
-| V3 | 002 | Indice parcial de `ADMIN` activo. |
-| V4 | 003 | `vacancy`, `vacancy_requirement`; rango UTC, peso 1--5 y orden unico por vacante. |
-| V5 | 004 | `matching_job`, `matching_job_requirement`, `matching_job_event`; un job activo por vacante, lease e idempotencia de requisitos. |
-| V6 | 005 | `outlook_connection` singleton (`id=1`) y `outlook_authorization_attempt`. |
-| V8 | 005 | Invariantes adicionales de scopes y conexion Outlook. |
-| V9 | 006 | `matching_job_discovered_message`, idempotente por job/referencia inmutable, y conteos de discovery. |
-| V10 | 007 | `candidate_document`, `matching_job_document`, hashes/adjuntos idempotentes y conteos de ingesta. |
-
-V7 no existe en el repositorio. No se reutiliza ese numero ni se renumeran
-migraciones: la proxima implementacion usa el siguiente numero disponible de
-Flyway.
+| V1 | 001-002 | `user_account`, `user_session`, `account_action_token`, `verification_resend_attempt`, `outbox_message`, `audit_event`; correo normalizado unico, tokens hasheados de un uso y outbox cifrado. |
+| V2 | 003 | `vacancy`, `vacancy_requirement`; amplía el constraint de rol para permitir `ADMIN` requerido por el bootstrap de identidad. |
 
 ## Plan de Persistencia por Spec
 
 | Specs | Modulo owner | Tablas o cambios futuros | Invariantes relevantes |
 | --- | --- | --- | --- |
-| 001-002 | `identity`, `audit` | Extensiones de cuenta/sesion/tokens y outbox durable si faltan respecto del historial aplicado. | Correo unico, token hasheado de un uso, version de cuenta, auditoria append-only. |
-| 003 | `vacancy` | `vacancy`, `vacancy_requirement` ya aplicadas. | Rango UTC valido, peso 1--5, orden unico. |
-| 004 | `job` | `matching_job`, requisitos snapshot y eventos ya aplicados; futuros checkpoints/counters en extensiones. | Un job activo por vacante, claim/lease y transiciones idempotentes. |
-| 005-006 | `outlook` | Conexion y intento OAuth, mensajes descubiertos ya aplicados. | Singleton Outlook, intento OAuth unico, mensaje unico por job/referencia inmutable. |
-| 007-008 | `document` | Documentos y vinculo job-documento ya aplicados; estado de extraccion y texto cifrado se agregan en nuevas migraciones. | Adjunto unico, hash tecnico indexado, documento disponible con storage/hash/formato validos. |
+| 001-002 | `identity`, `audit` | Implementadas en `V1`. | Correo unico, token hasheado de un uso y auditoria append-only. |
+| 003 | `vacancy` | `V2`: `vacancy`, `vacancy_requirement`. | Rango UTC valido, peso 1--5, orden unico. |
+| 004 | `job` | `matching_job`, requisitos snapshot y eventos. | Un job activo por vacante, claim/lease y transiciones idempotentes. |
+| 005-006 | `outlook` | Conexion, intento OAuth y mensajes descubiertos. | Singleton Outlook, intento OAuth unico, mensaje unico por job/referencia inmutable. |
+| 007-008 | `document` | Documentos y vinculo job-documento; estado de extraccion y texto cifrado. | Adjunto unico, hash tecnico indexado, documento disponible con storage/hash/formato validos. |
 | 009-010 | `analysis`, `reporting` | `document_requirement_assessment` y resultado de score por documento. | Conjunto completo de evaluaciones validado antes de score; score referencia snapshot. |
 | 011 | `candidate` | `candidate_profile` y relacion documento-identidad. | Igualdad protegida de correo; un candidato seleccionado por job/identidad; anonimos por documento. |
 | 012-013 | `reporting` | `report_version`, `report_candidate`, `requirement_assessment`; overlay de estado humano. | Maximo un reporte no vacio por job; referencia inmutable a documento, perfil nullable; version optimista de estado humano. |

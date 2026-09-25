@@ -79,7 +79,8 @@ public class AuthController {
             @ApiResponse(responseCode = "401", description = "Sesión inválida", content = @Content(schema = @Schema(implementation = ApiError.class))),
             @ApiResponse(responseCode = "403", description = "CSRF inválido o ausente", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    public TokenResponse refresh(@CookieValue("cv_refresh") String refresh, HttpServletRequest request, HttpServletResponse response) {
+    public TokenResponse refresh(@CookieValue(value = "cv_refresh", required = false) String refresh, HttpServletRequest request, HttpServletResponse response) {
+        if (refresh == null) throw new SecurityException();
         var login = service.refresh(refresh);
         refreshCookie(response, login.refreshToken(), Duration.ofHours(sessionHours));
         csrfCookie(request, response, Duration.ofHours(sessionHours));
@@ -120,7 +121,7 @@ public class AuthController {
             @ApiResponse(responseCode = "422", description = "Correo inválido", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public void resend(@Valid @RequestBody EmailRequest request) {
-        service.requestToken(request.email(), "EMAIL_VERIFICATION");
+        service.requestVerification(request.email());
     }
 
     @PostMapping("/verify-email")
@@ -132,7 +133,52 @@ public class AuthController {
             @ApiResponse(responseCode = "422", description = "Token ausente", content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public void verify(@Valid @RequestBody TokenRequest request) {
-        service.confirm(request.token(), "EMAIL_VERIFICATION");
+        service.confirmVerification(request.token());
+    }
+
+    @PostMapping("/password-reset/request")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @Operation(summary = "Solicitar restablecimiento de contraseña", description = "La respuesta es neutral.")
+    public void requestPasswordReset(@Valid @RequestBody EmailRequest request) {
+        service.requestPasswordReset(request.email());
+    }
+
+    @PostMapping("/password-reset/confirm")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Confirmar restablecimiento de contraseña")
+    public void confirmPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+        service.confirmPasswordReset(request.token(), request.password());
+    }
+
+    @PostMapping("/password/change")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Cambiar contraseña", description = "Requiere bearer JWT. Revoca todas las sesiones al completarse.")
+    @SecurityRequirement(name = "bearerAuth")
+    public void changePassword(@org.springframework.security.core.annotation.AuthenticationPrincipal UUID userId, @Valid @RequestBody PasswordChangeRequest request) {
+        service.changePassword(userId, request.currentPassword(), request.password());
+    }
+
+    @PostMapping("/email-change/request")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @Operation(summary = "Solicitar cambio de correo")
+    @SecurityRequirement(name = "bearerAuth")
+    public void requestEmailChange(@org.springframework.security.core.annotation.AuthenticationPrincipal UUID userId, @Valid @RequestBody EmailChangeRequest request) {
+        service.requestEmailChange(userId, request.currentPassword(), request.email());
+    }
+
+    @PostMapping("/email-change/resend")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @Operation(summary = "Reenviar confirmación de cambio de correo")
+    @SecurityRequirement(name = "bearerAuth")
+    public void resendEmailChange(@org.springframework.security.core.annotation.AuthenticationPrincipal UUID userId) {
+        service.resendEmailChange(userId);
+    }
+
+    @PostMapping("/email-change/verify")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Confirmar cambio de correo")
+    public void verifyEmailChange(@Valid @RequestBody TokenRequest request) {
+        service.confirmEmailChange(request.token());
     }
 
     private void refreshCookie(HttpServletResponse response, String value, Duration maxAge) {
@@ -180,6 +226,15 @@ public class AuthController {
     }
 
     record TokenRequest(@Schema(example = "token-recibido-por-correo") @NotBlank String token) {
+    }
+
+    record PasswordResetRequest(@NotBlank String token, @NotBlank String password) {
+    }
+
+    record PasswordChangeRequest(@NotBlank String currentPassword, @NotBlank String password) {
+    }
+
+    record EmailChangeRequest(@NotBlank String currentPassword, @Email @NotBlank String email) {
     }
 
     record TokenResponse(

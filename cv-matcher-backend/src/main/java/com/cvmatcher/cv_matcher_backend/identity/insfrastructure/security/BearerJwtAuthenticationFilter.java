@@ -33,13 +33,14 @@ public class BearerJwtAuthenticationFilter extends OncePerRequestFilter {
             var userId = UUID.fromString((String) claims.get("sub"));
             var sessionId = UUID.fromString((String) claims.get("sid"));
             var state = jdbc.query(
-                    "select u.role,u.status from user_account u join user_session s on s.user_id=u.id where u.id=? and s.id=? and s.revoked_at is null and s.expires_at > current_timestamp",
-                    rs -> rs.next() ? new Object[]{rs.getString(1), rs.getString(2)} : null,
+                    "select u.role,u.status,u.password_change_required from user_account u join user_session s on s.user_id=u.id where u.id=? and s.id=? and s.revoked_at is null and s.expires_at > current_timestamp",
+                    rs -> rs.next() ? new Object[]{rs.getString(1), rs.getString(2), rs.getBoolean(3)} : null,
                     userId,
                     sessionId
             );
             if (state != null && "ACTIVE".equals(state[1])) {
-                var authentication = new UsernamePasswordAuthenticationToken(userId, null, java.util.List.of(new SimpleGrantedAuthority("ROLE_" + state[0])));
+                var role = Boolean.TRUE.equals(state[2]) ? "PASSWORD_CHANGE_REQUIRED" : (String) state[0];
+                var authentication = new UsernamePasswordAuthenticationToken(userId, null, java.util.List.of(new SimpleGrantedAuthority("ROLE_" + role)));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (Exception ignored) {

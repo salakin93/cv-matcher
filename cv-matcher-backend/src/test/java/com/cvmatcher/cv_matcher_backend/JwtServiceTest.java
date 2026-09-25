@@ -14,14 +14,14 @@ class JwtServiceTest {
 
     @Test
     void rejectsASigningKeyShorterThan256Bits() {
-        var properties = new SecurityProperties("too-short", 15, 8, 24, false, 3, 3600, "", 1, 5, 15);
+        var properties = properties("too-short", 15);
 
         assertThrows(IllegalStateException.class, () -> new JwtService(properties, new ObjectMapper()));
     }
 
     @Test
     void issuesAndVerifiesClaimsForAnUnexpiredAccessToken() {
-        var properties = new SecurityProperties("a".repeat(32), 15, 8, 24, false, 3, 3600, "", 1, 5, 15);
+        var properties = properties("a".repeat(32), 15);
         var service = new JwtService(properties, new ObjectMapper());
         var userId = UUID.randomUUID();
         var sessionId = UUID.randomUUID();
@@ -35,7 +35,7 @@ class JwtServiceTest {
 
     @Test
     void rejectsExpiredAccessTokens() {
-        var properties = new SecurityProperties("a".repeat(32), -1, 8, 24, false, 3, 3600, "", 1, 5, 15);
+        var properties = properties("a".repeat(32), -1);
         var service = new JwtService(properties, new ObjectMapper());
 
         assertThrows(IllegalArgumentException.class, () -> service.verify(service.issue(UUID.randomUUID(), "RECRUITER", UUID.randomUUID())));
@@ -43,9 +43,14 @@ class JwtServiceTest {
 
     @Test
     void rejectsAnAccessTokenAtItsExactExpirationSecond() {
-        var properties = new SecurityProperties("a".repeat(32), 0, 8, 24, false, 3, 3600, "", 1, 5, 15);
+        var properties = properties("a".repeat(32), 0);
         var service = new JwtService(properties, new ObjectMapper());
 
         assertThrows(IllegalArgumentException.class, () -> service.verify(service.issue(UUID.randomUUID(), "RECRUITER", UUID.randomUUID())));
+    }
+
+    private SecurityProperties properties(String signingKey, long accessTokenMinutes) {
+        return new SecurityProperties(signingKey, accessTokenMinutes, 8, 24, false, 3, 3600, "", 1, 5, 15,
+                30, 3, 3600, 24, 3, 3600, "", "");
     }
 }

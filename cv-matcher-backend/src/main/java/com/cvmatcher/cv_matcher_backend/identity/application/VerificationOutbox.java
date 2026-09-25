@@ -26,10 +26,10 @@ public class VerificationOutbox {
         this.encryptionKey = decodeEncryptionKey(properties);
     }
 
-    public void enqueue(String recipient, String token) {
+    public void enqueue(String recipient, String purpose, String payload) {
         jdbc.update(
-                "insert into outbox_message(id,recipient,purpose,payload_ciphertext,encryption_key_version,created_at) values(?,?, 'EMAIL_VERIFICATION',?,?,?)",
-                UUID.randomUUID(), recipient, encrypt(token), properties.outboxEncryptionKeyVersion(), Timestamp.from(Instant.now())
+                "insert into outbox_message(id,recipient,purpose,payload_ciphertext,encryption_key_version,created_at) values(?,?,?,?,?,?)",
+                UUID.randomUUID(), recipient, purpose, encrypt(payload), properties.outboxEncryptionKeyVersion(), Timestamp.from(Instant.now())
         );
     }
 
